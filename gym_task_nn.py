@@ -30,6 +30,14 @@ def eval(x, render=False):
 
     return -sum(cumulative_rewards) / 100
 
+def get_pruning_mask(weights, prune_ratio):
+    num_vars = weights.shape[0]
+    num_to_prune = int(prune_ratio/100 * num_vars)
+    sorted_weights = np.sort(np.abs(weights.flatten()))
+    threshold = sorted_weights[num_to_prune]
+    mask = np.ones_like(weights)
+    mask[np.abs(weights) <= threshold] = 0
+    return mask
 
 def generator(random, args):
     return np.asarray([random.uniform(args["pop_init_range"][0],
@@ -48,19 +56,19 @@ def parallel_val(candidates):
     with Pool(20) as p:
         return p.map(eval, candidates)
 
+
 if __name__ == "__main__":
     args = {}
-    fka = NN([8, 5, 4])
+    fka = RNN([8, 5, 4], 20, 0.001, 0, True)
     rng = np.random.default_rng()
-    #eval(rng.random(fka.nweights*4), render=True)
 
-
-    args["num_vars"] = fka.nweights  # Number of dimensions of the search space
-    args["max_generations"] = 50
-    args["sigma"] = 1.0  # default standard deviation
-    args["pop_size"] = 4  # mu
-    args["num_offspring"] = 20  # lambda
-    args["pop_init_range"] = [0, 1]  # Range for the initial population
+    args["num_vars"] = fka.nweights
+    args["max_total_generations"] = 80
+    args["max_partial_generations"] = 10
+    args["sigma"] = 1.0
+    args["pop_size"] = 4
+    args["num_offspring"] = 20
+    args["pop_init_range"] = [0, 1]
 
     random = Random(0)
     es = cmaes(generator(random, args),
@@ -68,17 +76,41 @@ if __name__ == "__main__":
                {'popsize': args["num_offspring"],
                 'seed': 0,
                 'CMA_mu': args["pop_size"]})
+
     gen = 0
-    while gen <= args["max_generations"]:
-        candidates = es.ask()  # get list of new solutions
-        fitnesses = parallel_val(candidates)
-        print("generation "+str(gen)+"  "+str(min(fitnesses))+"  "+str(np.mean(fitnesses)))
-        es.tell(candidates, fitnesses)
-        gen += 1
+    n = 1
+    pruning_mask = np.ones(args["num_vars"])
+    initial_candidates = es.ask()
+    candidates = initial_candidates
+    fitnesses = np.zeros(args["num_offspring"])
+    current_prune_ratio = 0
+    
+    while gen <= args["max_total_generations"]:
+        for i in range(args["max_partial_generations"]*n):
+            if i == 0:
+                gen = 0
+                candidates = es.ask()
+                # apply the pruning mask to the whole offspring
+                candidates = np.multiply(initial_candidates, np.tile(pruning_mask, (args["num_offspring"],1)))
+            else:
+                candidates = es.ask()
+                # apply the pruning mask to the whole offspring
+                candidates = np.multiply(candidates, np.tile(pruning_mask, (args["num_offspring"],1)))
+            fitnesses = parallel_val(candidates)
+            print("Network density: "+str((0.8**(n-1))*100)+"%, Gen "+str(gen+1)+"  "+str(min(fitnesses))+"  "+str(np.mean(fitnesses)))
+            es.tell(candidates, fitnesses)
+            gen += 1
+        # calculate the pruning mask on the best guy in the current generation
+        best_guy = es.best.x
+        current_prune_ratio += (100-current_prune_ratio)*fka.prune_ratio/100
+        pruning_mask = get_pruning_mask(best_guy, current_prune_ratio)
+        print()
+        n += 1
     final_pop = np.asarray(es.ask())
     final_pop_fitnesses = np.asarray(parallel_val(final_pop))
-
+    
     best_guy = es.best.x
     best_fitness = es.best.f
-    with open("./nn_test_"+str(best_fitness)+".pkl", "wb") as f:
+
+    with open("./rnn_test_"+str(best_fitness)+".pkl", "wb") as f:
         pickle.dump(best_guy, f)
