@@ -14,7 +14,17 @@ sbnn = SBM([2,5,3], 40, 0.1, 0, True)
 ```
 
 ---
-# References
-If you use this work, please cite us :) 
-- [Self Building Neural Networks](https://arxiv.org/abs/2304.01086)
+# Citinig
+If you like this project, we would appreciate it if you starred the repository in order to help us increase its visibility. Furthermore, if you find the framework useful in your research, we would be grateful if you could cite our [publication](https://arxiv.org/abs/2304.01086) using the following bibtex entry:
+
+```bib
+@misc{ferigo2023sbm,
+      title={Self-building Neural Networks}, 
+      author={Andrea Ferigo and Giovanni Iacca},
+      year={2023},
+      eprint={2304.01086},
+      archivePrefix={arXiv},
+      primaryClass={cs.NE}
+}
+```
 
