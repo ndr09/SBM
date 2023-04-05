@@ -14,7 +14,7 @@ sbnn = SBM([2,5,3], 40, 0.1, 0, True)
 ```
 
 ---
-# Citinig
+# Citing
 If you like this project, we would appreciate it if you starred the repository in order to help us increase its visibility. Furthermore, if you find the framework useful in your research, we would be grateful if you could cite our [publication](https://arxiv.org/abs/2304.01086) using the following bibtex entry:
 
 ```bib
