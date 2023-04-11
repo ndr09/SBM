@@ -159,6 +159,29 @@ class SBM(HNN):
     def reset_weights(self):
         self.weights = np.zeros((self.tns, self.tns), dtype=float)
 
+    def set_weights(self, weights):
+        assert len(weights) == self.nweights
+        self.weights = np.zeros((self.tns, self.tns))
+        # print("############# "+str(len(hrules)))
+        c = 0
+        # set input to other nodes rules
+        for i in range(self.nodes[0]):
+            for o in range(self.nodes[0], self.tns):
+                self.weights[i, o] = weights[c]
+                c += 1
+        # set Hidden to Hidden nodes rules
+        for i in range(self.nodes[0], self.nodes[0] + self.nodes[1]):
+            for o in range(self.nodes[0], self.nodes[0] + self.nodes[1]):
+                if not i == o:
+                    self.weights[i, o] = weights[c]
+                    c += 1
+        # set H to output nodes rules
+        for i in range(self.nodes[0], self.nodes[0] + self.nodes[1]):
+            for o in range(self.nodes[0] + self.nodes[1], self.tns):
+                if not i == o:
+                    self.weights[i, o] = weights[c]
+                    c += 1
+
     def set_hrules(self, hrules):
         assert len(hrules) == self.nweights * 4
         self.hrules = np.zeros((self.tns, self.tns, 4))
@@ -189,6 +212,7 @@ class SBM(HNN):
                     self.hrules[i, o, 1] = hrules[c + 1]
                     self.hrules[i, o, 2] = hrules[c + 2]
                     self.hrules[i, o, 3] = hrules[c + 3]
+                    c += 4
 
     def sanitize_weights(self):
         # clean impossible connections
