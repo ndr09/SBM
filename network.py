@@ -7,11 +7,13 @@ import pickle
 
 
 class NN():
-    def __init__(self, nodes):
+    def __init__(self, nodes, prune_ratio):
         self.nodes = nodes
         self.activations = [[0 for i in range(node)] for node in nodes]
-        self.nweights = nodes[0]*nodes[1]+nodes[1]*nodes[2]
-
+        self.nweights = 0
+        for i in range(len(self.nodes) - 1):
+            self.nweights += self.nodes[i]*self.nodes[i+1]
+        self.prune_ratio = prune_ratio
         self.weights = [[] for _ in range(len(self.nodes) - 1)]
 
     def activate(self, inputs):
@@ -26,7 +28,6 @@ class NN():
         return np.array(self.activations[-1])
 
     def set_weights(self, weights):
-        # self.weights = [[] for _ in range(len(self.nodes) - 1)]
         c = 0
         for i in range(1, len(self.nodes)):
             self.weights[i - 1] = [[0 for _ in range(self.nodes[i - 1])] for __ in range(self.nodes[i])]
@@ -34,7 +35,6 @@ class NN():
                 for k in range(self.nodes[i - 1]):
                     self.weights[i - 1][j][k] = weights[c]
                     c += 1
-        #print(c)
 
 
 class HNN(NN):

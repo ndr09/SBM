@@ -6,11 +6,12 @@ import functools
 from random import Random
 from multiprocessing import Pool
 import pickle
+import matplotlib.pyplot as plt
 
 def eval(x, render=False):
     cumulative_rewards = []
     task = gym.make("LunarLander-v2")
-    agent = NN([8, 5, 4])
+    agent = NN([8, 5, 4], 20)
     agent.set_weights(x)
     for i in range(100):
         cumulative_rewards.append(0)
@@ -30,14 +31,23 @@ def eval(x, render=False):
 
     return -sum(cumulative_rewards) / 100
 
-def get_pruning_mask(weights, prune_ratio):
-    num_vars = weights.shape[0]
-    num_to_prune = int(prune_ratio/100 * num_vars)
-    sorted_weights = np.sort(np.abs(weights.flatten()))
-    threshold = sorted_weights[num_to_prune]
+def get_pruning_mask(nn, weights, prune_ratio):
     mask = np.ones_like(weights)
-    mask[np.abs(weights) <= threshold] = 0
+    c = 0
+    nn.set_weights(weights)
+    for i in range(1,len(nn.nodes)):
+        for j in range(nn.nodes[i]):
+            num_to_prune = round(prune_ratio/100 * nn.nodes[i-1])
+            neuron_weights = nn.weights[i-1][j]
+            sorted_weights = np.sort(np.abs(neuron_weights))
+            threshold = sorted_weights[num_to_prune-1]
+            neuron_mask = np.ones_like(neuron_weights)
+            neuron_mask[np.abs(neuron_weights) <= threshold] = 0
+            for l in range(nn.nodes[i-1]):
+                    mask[c] = neuron_mask[l]
+                    c +=1
     return mask
+
 
 def generator(random, args):
     return np.asarray([random.uniform(args["pop_init_range"][0],
@@ -56,10 +66,26 @@ def parallel_val(candidates):
     with Pool(20) as p:
         return p.map(eval, candidates)
 
+def plot_fitnesses(fitnesses):
+    c = 0
+    fig, axes = plt.subplots()
+    for i, fitness in enumerate(fitnesses):
+        x = list(range(1, len(fitness) + 1))
+        if len(x) > len(fitness):
+            x = x[:len(fitness)]
+        label = f"Sparsity {round((0.8 ** i) * 100, 1)}%"
+        axes.plot(x, fitness, label=label)
+        c += 1
+    axes.axhline(y=-200, linestyle='--', color='black', label='Successful score')
+    axes.legend()
+    axes.set_xlabel('Numero di generazioni')
+    axes.set_ylabel('Punteggio medio')
+    plt.savefig(f'./gen{c*10}.png')
+
 
 if __name__ == "__main__":
     args = {}
-    fka = RNN([8, 5, 4], 20, 0.001, 0, True)
+    fka = NN([8, 5, 4], 20)
     rng = np.random.default_rng()
 
     args["num_vars"] = fka.nweights
@@ -84,8 +110,11 @@ if __name__ == "__main__":
     candidates = initial_candidates
     fitnesses = np.zeros(args["num_offspring"])
     current_prune_ratio = 0
+
+    fitnesses_history = []
     
     while gen <= args["max_total_generations"]:
+        fitnesses_history.append([])
         for i in range(args["max_partial_generations"]*n):
             if i == 0:
                 gen = 0
@@ -97,14 +126,16 @@ if __name__ == "__main__":
                 # apply the pruning mask to the whole offspring
                 candidates = np.multiply(candidates, np.tile(pruning_mask, (args["num_offspring"],1)))
             fitnesses = parallel_val(candidates)
+            fitnesses_history[n-1].append(np.mean(fitnesses))
             print("Network density: "+str((0.8**(n-1))*100)+"%, Gen "+str(gen+1)+"  "+str(min(fitnesses))+"  "+str(np.mean(fitnesses)))
             es.tell(candidates, fitnesses)
             gen += 1
+        print()
+        plot_fitnesses(fitnesses_history)
         # calculate the pruning mask on the best guy in the current generation
         best_guy = es.best.x
         current_prune_ratio += (100-current_prune_ratio)*fka.prune_ratio/100
-        pruning_mask = get_pruning_mask(best_guy, current_prune_ratio)
-        print()
+        pruning_mask = get_pruning_mask(fka, best_guy, current_prune_ratio)
         n += 1
     final_pop = np.asarray(es.ask())
     final_pop_fitnesses = np.asarray(parallel_val(final_pop))
@@ -112,5 +143,5 @@ if __name__ == "__main__":
     best_guy = es.best.x
     best_fitness = es.best.f
 
-    with open("./rnn_test_"+str(best_fitness)+".pkl", "wb") as f:
+    with open("./nn_test_"+str(best_fitness)+".pkl", "wb") as f:
         pickle.dump(best_guy, f)
