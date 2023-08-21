@@ -13,15 +13,22 @@ from snntorch import spikegen
 import torch
 
 
-def sigmoid(x):
-        return 1 / (1 + np.exp(-x))
-
 def min0_max1(x):
     if x < 0:
         return 0
     if x > 1:
         return 1
     return x
+
+def closest_binary(n, m):
+    binary_number = []
+    for i in range(n):
+        if m >= 2**(n - 1 - i):
+            binary_number.append(1)
+            m -= 2**(n - 1 - i)
+        else:
+            binary_number.append(0)
+    return binary_number
 
 
 def rate_code(inputs, n_timesteps):
@@ -30,7 +37,8 @@ def rate_code(inputs, n_timesteps):
     scaled_inputs.append(min0_max1((inputs[1]+5)/10))
     scaled_inputs.append(min0_max1((inputs[2]+0.4)/0.8))
     scaled_inputs.append(min0_max1((inputs[3]+5)/10))
-    return spikegen.rate(torch.tensor(scaled_inputs), num_steps = n_timesteps)
+    encoded_inputs = spikegen.rate(torch.tensor(scaled_inputs), num_steps = n_timesteps)
+    return encoded_inputs.tolist()
 
 
 def latency_code(inputs, n_timesteps):
@@ -39,16 +47,20 @@ def latency_code(inputs, n_timesteps):
     scaled_inputs.append(min0_max1((inputs[1]+5)/10))
     scaled_inputs.append(min0_max1((inputs[2]+0.4)/0.8))
     scaled_inputs.append(min0_max1((inputs[3]+5)/10))
-    return spikegen.latency(torch.tensor(scaled_inputs), num_steps = n_timesteps)
+    encoded_inputs = spikegen.latency(torch.tensor(scaled_inputs), num_steps = n_timesteps, normalize=True, linear=True)
+    return encoded_inputs.tolist()
 
 
-def no_code(inputs, n_timesteps):
+'''def no_code(inputs, n_timesteps):
     scaled_inputs = []
     scaled_inputs.append(min0_max1((inputs[0]+0.8)/1.6))
     scaled_inputs.append(min0_max1((inputs[1]+5)/10))
     scaled_inputs.append(min0_max1((inputs[2]+0.4)/0.8))
     scaled_inputs.append(min0_max1((inputs[3]+5)/10))
-    return [scaled_inputs.copy() for _ in range(n_timesteps)]
+    return [scaled_inputs.copy() for _ in range(n_timesteps)]'''
+
+def no_code(inputs, n_timesteps):
+    return [inputs.copy() for _ in range(n_timesteps)]
 
 
 def phase_code(inputs, n_timesteps):
@@ -61,11 +73,20 @@ def phase_code(inputs, n_timesteps):
     
     phase_coded_inputs = []
 
-    for input_val in scaled_inputs:
-        binary_repr = format(int(input_val * (2 ** n_timesteps)), '0' + str(n_timesteps) + 'b')
-        phase_coded_inputs.append([int(bit) for bit in binary_repr])
-    
-    return phase_coded_inputs
+    max_representabile_number = 2**n_timesteps
+    scaled_inputs[0] *= max_representabile_number
+    scaled_inputs[1] *= max_representabile_number
+    scaled_inputs[2] *= max_representabile_number
+    scaled_inputs[3] *= max_representabile_number
+
+    phase_coded_inputs.append(closest_binary(n_timesteps, scaled_inputs[0]))
+    phase_coded_inputs.append(closest_binary(n_timesteps, scaled_inputs[1]))
+    phase_coded_inputs.append(closest_binary(n_timesteps, scaled_inputs[2]))
+    phase_coded_inputs.append(closest_binary(n_timesteps, scaled_inputs[3]))
+
+    phase_coded_inputs_transposed = list(zip(*phase_coded_inputs))
+
+    return phase_coded_inputs_transposed
 
 
 def eval(x, render=False):
@@ -91,14 +112,13 @@ def eval(x, render=False):
 
     return -sum(cumulative_rewards) / 100
 
-
 def get_pruning_mask(snn, weights, prune_ratio):
     mask = np.ones_like(weights)
     c = 0
     snn.set_params(weights)
     for i in range(1,len(snn.neurons)):
         for j in range(len(snn.neurons[i])):
-            num_to_prune = round(prune_ratio/100 * len(snn.neurons[i-1]))
+            num_to_prune = round(prune_ratio/100 * (len(snn.neurons[i-1])+1))
             neuron_weights = snn.weights[i-1][j]
             sorted_weights = np.sort(np.abs(neuron_weights))
             threshold = sorted_weights[num_to_prune-1]
@@ -106,7 +126,7 @@ def get_pruning_mask(snn, weights, prune_ratio):
             neuron_mask[np.abs(neuron_weights) <= threshold] = 0
             for l in range(len(snn.neurons[i-1])):
                     mask[c] = neuron_mask[l]
-                    c +=1
+                    c += 1
     return mask
 
 
@@ -173,7 +193,7 @@ if __name__ == "__main__":
     fka = SNN([4, 8, 8, 2], 20)
     rng = np.random.default_rng()
 
-    args["num_vars"] = fka.nweights + fka.nthresholds + fka.nweights
+    args["num_vars"] = fka.nweights + fka.nthresholds + fka.nbetas
     args["max_total_generations"] = 500
     args["added_generations"] = 50
     args["max_initial_generations"] = 100
@@ -183,6 +203,14 @@ if __name__ == "__main__":
     args["pop_init_range"] = [0, 1]
 
     random = Random(0)
+
+    '''es = cmaes(generator(random, args),
+               args["sigma"],
+               {'popsize': args["num_offspring"],
+                'seed': 0,
+                'CMA_mu': args["pop_size"],
+                'bounds': [0, np.inf]})'''
+
     es = cmaes(generator(random, args),
                args["sigma"],
                {'popsize': args["num_offspring"],
@@ -218,6 +246,27 @@ if __name__ == "__main__":
             best_scores_history[n].append(min(fitnesses))
             print("Network density: "+str((0.8**(n))*100)+"%, Gen "+str(gen+1)+"  "+str(min(fitnesses))+"  "+str(np.mean(fitnesses)))
             es.tell(candidates, fitnesses)
+
+            best_guy = es.best.x
+            best = SNN([4, 8, 8, 2], 20)
+            best.set_params(best_guy)
+            with open("thresholds-biases.txt", "a") as file:
+                file.write("GEN " + str(gen+1) + "\n")
+                file.write("thresholds:\n")
+                d = 0
+                for neuron in best.neurons:
+                    for i in range(len(neuron)):
+                        file.write(str(best.neurons[d][i].threshold) + "\n")
+                    d += 1
+                file.write("\n")
+                file.write("betas:\n")
+                d = 0
+                for neuron in best.neurons:
+                    for i in range(len(neuron)):
+                        file.write(str(best.neurons[d][i].beta) + "\n")
+                    d += 1
+                file.write("\n\n")
+
             gen += 1
         print()
         plot_fitnesses(average_scores_history, best_scores_history)
@@ -227,6 +276,8 @@ if __name__ == "__main__":
         best = SNN([4, 8, 8, 2], 20)
         best.set_params(best_guy)
         
+
+        '''
         print("thresholds:")
         d = 0
         for neuron in best.neurons:
@@ -240,9 +291,11 @@ if __name__ == "__main__":
             for i in range(len(neuron)):
                 print(best.neurons[d][i].beta)
             d += 1
-
+        '''
+            
         current_prune_ratio += (100-current_prune_ratio)*fka.prune_ratio/100
         pruning_mask = get_pruning_mask(fka, best_guy, current_prune_ratio)
+        
         n += 1
     final_pop = np.asarray(es.ask())
     final_pop_fitnesses = np.asarray(parallel_val(final_pop))
