@@ -25,105 +25,67 @@ def closest_binary(n, m):
     return binary_number
 
 
-def inputs_resizing(inputs, params):
-    output = []
-    for i in range(len(inputs)):
-        output.append(inputs[i]*params[-1-i])
-    return output
-
-def double_encoding(inputs):
-    output = []
-    for i in inputs:
-        if i >= 0:
-            output.append(0)
-            output.append(i)
-        else:
-            output.append(-i)
-            output.append(0)
-    return output
-
-
 def rate_code(inputs, n_timesteps):
-    double_inputs = double_encoding(inputs)
     scaled_inputs = []
-    scaled_inputs.append(math.tanh(double_inputs[0]))
-    scaled_inputs.append(math.tanh(double_inputs[1]))
-    scaled_inputs.append(math.tanh(double_inputs[2]))
-    scaled_inputs.append(math.tanh(double_inputs[3]))
-    scaled_inputs.append(math.tanh(double_inputs[4]))
-    scaled_inputs.append(math.tanh(double_inputs[5]))
-    scaled_inputs.append(math.tanh(double_inputs[6]))
-    scaled_inputs.append(math.tanh(double_inputs[7]))
+    scaled_inputs.append((inputs[0]+1.5)/3)
+    scaled_inputs.append((inputs[1]+1.5)/3)
+    scaled_inputs.append((inputs[2]+5)/10)
+    scaled_inputs.append((inputs[3]+5)/10)
+    scaled_inputs.append((inputs[4]+3.15)/6.30)
+    scaled_inputs.append((inputs[5]+5)/10)
+    scaled_inputs.append(inputs[6])
+    scaled_inputs.append(inputs[7])
     encoded_inputs = spikegen.rate(torch.tensor(scaled_inputs), num_steps = n_timesteps)
     return encoded_inputs.tolist()
 
 
 def latency_code(inputs, n_timesteps):
-    double_inputs = double_encoding(inputs)
     scaled_inputs = []
-    scaled_inputs.append(math.tanh(double_inputs[0]))
-    scaled_inputs.append(math.tanh(double_inputs[1]))
-    scaled_inputs.append(math.tanh(double_inputs[2]))
-    scaled_inputs.append(math.tanh(double_inputs[3]))
-    scaled_inputs.append(math.tanh(double_inputs[4]))
-    scaled_inputs.append(math.tanh(double_inputs[5]))
-    scaled_inputs.append(math.tanh(double_inputs[6]))
-    scaled_inputs.append(math.tanh(double_inputs[7]))
+    scaled_inputs.append((inputs[0]+1.5)/3)
+    scaled_inputs.append((inputs[1]+1.5)/3)
+    scaled_inputs.append((inputs[2]+5)/10)
+    scaled_inputs.append((inputs[3]+5)/10)
+    scaled_inputs.append((inputs[4]+3.15)/6.30)
+    scaled_inputs.append((inputs[5]+5)/10)
+    scaled_inputs.append(inputs[6])
+    scaled_inputs.append(inputs[7])
     encoded_inputs = spikegen.latency(torch.tensor(scaled_inputs), num_steps = n_timesteps, normalize=True, linear=True)
     return encoded_inputs.tolist()
 
 
 def no_code(inputs, n_timesteps):
-    double_inputs = double_encoding(inputs)
-    return [double_inputs.copy() for _ in range(n_timesteps)]
-
-'''def no_code(inputs, n_timesteps):
-    double_inputs = double_encoding(inputs)
     scaled_inputs = []
-    scaled_inputs.append(math.tanh(double_inputs[0]))
-    scaled_inputs.append(math.tanh(double_inputs[1]))
-    scaled_inputs.append(math.tanh(double_inputs[2]))
-    scaled_inputs.append(math.tanh(double_inputs[3]))
-    scaled_inputs.append(math.tanh(double_inputs[4]))
-    scaled_inputs.append(math.tanh(double_inputs[5]))
-    scaled_inputs.append(math.tanh(double_inputs[6]))
-    scaled_inputs.append(math.tanh(double_inputs[7]))
-    return [scaled_inputs.copy() for _ in range(n_timesteps)]'''
+    scaled_inputs.append((inputs[0]+1.5)/3)
+    scaled_inputs.append((inputs[1]+1.5)/3)
+    scaled_inputs.append((inputs[2]+5)/10)
+    scaled_inputs.append((inputs[3]+5)/10)
+    scaled_inputs.append((inputs[4]+3.15)/6.30)
+    scaled_inputs.append((inputs[5]+5)/10)
+    scaled_inputs.append(inputs[6])
+    scaled_inputs.append(inputs[7])
+    return [scaled_inputs.copy() for _ in range(n_timesteps)]
 
 
 def phase_code(inputs, n_timesteps):
     
-    double_inputs = double_encoding(inputs)
     scaled_inputs = []
-    scaled_inputs.append(math.tanh(double_inputs[0]))
-    scaled_inputs.append(math.tanh(double_inputs[1]))
-    scaled_inputs.append(math.tanh(double_inputs[2]))
-    scaled_inputs.append(math.tanh(double_inputs[3]))
-    scaled_inputs.append(math.tanh(double_inputs[4]))
-    scaled_inputs.append(math.tanh(double_inputs[5]))
-    scaled_inputs.append(math.tanh(double_inputs[6]))
-    scaled_inputs.append(math.tanh(double_inputs[7]))
+    scaled_inputs.append((inputs[0]+1.5)/3)
+    scaled_inputs.append((inputs[1]+1.5)/3)
+    scaled_inputs.append((inputs[2]+5)/10)
+    scaled_inputs.append((inputs[3]+5)/10)
+    scaled_inputs.append((inputs[4]+3.15)/6.30)
+    scaled_inputs.append((inputs[5]+5)/10)
+    scaled_inputs.append(inputs[6])
+    scaled_inputs.append(inputs[7])
     
     phase_coded_inputs = []
 
     max_representabile_number = 2**n_timesteps
-    scaled_inputs[0] *= max_representabile_number
-    scaled_inputs[1] *= max_representabile_number
-    scaled_inputs[2] *= max_representabile_number
-    scaled_inputs[3] *= max_representabile_number
-    scaled_inputs[4] *= max_representabile_number
-    scaled_inputs[5] *= max_representabile_number
-    scaled_inputs[6] *= max_representabile_number
-    scaled_inputs[7] *= max_representabile_number
+    for i in range(len(scaled_inputs)):
+        scaled_inputs[i] *= max_representabile_number
 
-    phase_coded_inputs.append(closest_binary(n_timesteps, scaled_inputs[0]))
-    phase_coded_inputs.append(closest_binary(n_timesteps, scaled_inputs[1]))
-    phase_coded_inputs.append(closest_binary(n_timesteps, scaled_inputs[2]))
-    phase_coded_inputs.append(closest_binary(n_timesteps, scaled_inputs[3]))
-    phase_coded_inputs.append(closest_binary(n_timesteps, scaled_inputs[4]))
-    phase_coded_inputs.append(closest_binary(n_timesteps, scaled_inputs[5]))
-    phase_coded_inputs.append(closest_binary(n_timesteps, scaled_inputs[6]))
-    phase_coded_inputs.append(closest_binary(n_timesteps, scaled_inputs[7]))
+    for i in range(len(scaled_inputs)):
+        phase_coded_inputs.append(closest_binary(n_timesteps, scaled_inputs[i]))
 
     phase_coded_inputs_transposed = list(zip(*phase_coded_inputs))
 
@@ -132,8 +94,8 @@ def phase_code(inputs, n_timesteps):
 
 def eval(x, render=False):
     cumulative_rewards = []
-    task = gym.make("CartPole-v1")
-    agent = SNN([8, 4, 4, 2], 20)
+    task = gym.make("LunarLander-v2")
+    agent = SNN([8, 5, 4], 20)
     agent.set_params(x)
     for i in range(100):
         cumulative_rewards.append(0)
@@ -142,7 +104,7 @@ def eval(x, render=False):
         obs = task.reset()
         counter = 0
         while not done:
-            output = agent.activate(phase_code(inputs_resizing(obs, x), 30))
+            output = agent.activate(no_code(obs, 30))
 
             # arr[output]+=1
             if render:
@@ -190,7 +152,7 @@ def parallel_val(candidates):
         return p.map(eval, candidates)
 
 
-def save_scores(average_scores_history, best_scores_history, file_prefix='cart_pole_'):
+def save_scores(average_scores_history, best_scores_history, file_prefix='lunar_lander_'):
     with open(f'{file_prefix}average_scores.txt', 'w') as f:
         f.write(' '.join(map(str, average_scores_history)))
     with open(f'{file_prefix}best_scores.txt', 'w') as f:
@@ -207,36 +169,37 @@ def plot_fitnesses(average_scores_history, best_scores_history):
     for i, fitness in enumerate(average_scores_history):
         x = list(range(sum(map(len, average_scores_history[:i])), sum(map(len, average_scores_history[:i+1]))))
         axes[0].plot(x, fitness, label=f'Density {round((0.8 ** i) * 100, 1)}%', color=colors[i])
-    axes[0].axhline(y=-475, linestyle='--', color='black', label='Successful score')
+    axes[0].axhline(y=-200, linestyle='--', color='black', label='Successful score')
     axes[0].legend(loc='center left', bbox_to_anchor=(1, 0.5), ncol=1)
     axes[0].set_xlabel('Numero di generazioni')
     axes[0].set_ylabel('Punteggio medio')
     axes[0].set_title('Average scores')
-    axes[0].set_ylim(bottom=min(min(best_scores_history_concat), min(average_scores_history_concat), -200)-30, top=max(max(best_scores_history_concat), max(average_scores_history_concat), -475)+30)
+    axes[0].set_ylim(bottom=min(min(best_scores_history_concat), min(average_scores_history_concat), -200)-30, top=max(max(best_scores_history_concat), max(average_scores_history_concat), -200)+30)
 
     for i, fitness in enumerate(best_scores_history):
         x = list(range(sum(map(len, best_scores_history[:i])), sum(map(len, best_scores_history[:i+1]))))
         axes[1].plot(x, fitness, label=f'Density {round((0.8 ** i) * 100, 1)}%', color=colors[i])
-    axes[1].axhline(y=-475, linestyle='--', color='black', label='Successful score')
+    axes[1].axhline(y=-200, linestyle='--', color='black', label='Successful score')
     axes[1].legend(loc='center left', bbox_to_anchor=(1, 0.5), ncol=1)
     axes[1].set_xlabel('Numero di generazioni')
     axes[1].set_ylabel('Punteggio migliore')
     axes[1].set_title('Best guy scores')
-    axes[1].set_ylim(bottom=min(min(best_scores_history_concat), min(average_scores_history_concat), -475)-30, top=max(max(best_scores_history_concat), max(average_scores_history_concat), -475)+30)
+    axes[1].set_ylim(bottom=min(min(best_scores_history_concat), min(average_scores_history_concat), -200)-30, top=max(max(best_scores_history_concat), max(average_scores_history_concat), -200)+30)
 
     plt.subplots_adjust(right=0.82)
     
-    plt.savefig(f'./CartPole_SNN_PhaseCode_PruningIteration#{len(average_scores_history)-1}.png')
+    plt.savefig(f'./LunarLander_SNN_PhaseCode_PruningIteration#{len(average_scores_history)-1}.png')
 
 
 if __name__ == "__main__":
     args = {}
-    fka = SNN([8, 4, 4, 2], 20)
+    fka = SNN([8, 5, 4], 20)
 
-    args["num_vars"] = fka.nweights + fka.nthresholds + fka.nbetas + len(fka.neurons[0])
+    args["num_vars"] = fka.nweights + fka.nthresholds + fka.nbetas
     args["max_total_generations"] = 500
     args["added_generations"] = 50
-    args["max_initial_generations"] = 100
+
+    args["max_initial_generations"] = 500
     args["sigma"] = 1.0
     args["pop_size"] = 4
     args["num_offspring"] = 20
@@ -250,12 +213,6 @@ if __name__ == "__main__":
                 'seed': 0,
                 'CMA_mu': args["pop_size"],
                 'bounds': [0, np.inf]})
-
-    '''es = cmaes(generator(random, args),
-               args["sigma"],
-               {'popsize': args["num_offspring"],
-                'seed': 0,
-                'CMA_mu': args["pop_size"]})'''
 
     gen = 0
     n = 0
@@ -288,7 +245,7 @@ if __name__ == "__main__":
             es.tell(candidates, fitnesses)
 
             best_guy = es.best.x
-            best = SNN([8, 4, 4, 2], 20)
+            best = SNN([8, 5, 4], 20)
             best.set_params(best_guy)
             with open("thresholds-biases.txt", "a") as file:
                 file.write("GEN " + str(gen+1) + "\n")
@@ -313,25 +270,8 @@ if __name__ == "__main__":
         # calculate the pruning mask on the best guy in the current generation
         best_guy = es.best.x
         print(best_guy)
-        best = SNN([8, 4, 4, 2], 20)
+        best = SNN([8, 5, 4], 20)
         best.set_params(best_guy)
-        
-
-        '''
-        print("thresholds:")
-        d = 0
-        for neuron in best.neurons:
-            for i in range(len(neuron)):
-                print(best.neurons[d][i].threshold)
-            d += 1
-        print()
-        print("betas:")
-        d = 0
-        for neuron in best.neurons:
-            for i in range(len(neuron)):
-                print(best.neurons[d][i].beta)
-            d += 1
-        '''
             
         current_prune_ratio += (100-current_prune_ratio)*fka.prune_ratio/100
         pruning_mask = get_pruning_mask(fka, best_guy, current_prune_ratio)
@@ -345,5 +285,5 @@ if __name__ == "__main__":
 
     save_scores(average_scores_history, best_scores_history)
 
-    with open("./nn_cartpole_SNN_phasecode"+str(best_fitness)+".pkl", "wb") as f:
+    with open("./nn_lunarlander_SNN_phasecode"+str(best_fitness)+".pkl", "wb") as f:
         pickle.dump(best_guy, f)
