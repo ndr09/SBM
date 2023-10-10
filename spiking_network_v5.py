@@ -23,7 +23,7 @@ class LifNeuron():
         self.membrane_potential = self.beta*self.membrane_potential + input
         if self.membrane_potential >= self.threshold:
             self.spike = 1
-            self.membrane_potential -= self.threshold
+            self.membrane_potential = 0
         else:
             self.spike = 0
 
@@ -43,6 +43,9 @@ class SNN():
         self.weights = [[] for _ in range(len(self.neurons) - 1)]
 
     def activate(self, inputs):
+        for i in range(len(self.neurons)):
+            for j in range(len(self.neurons[i])):
+                self.neurons[i][j].membrane_potential = 0
         output = [0 for i in range(len(self.neurons[-1]))]
         for k in range(len(inputs)):
             for i in range(len(inputs[k])):
