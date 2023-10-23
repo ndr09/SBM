@@ -1,15 +1,16 @@
 import os
-import time
 
 import numpy as np
 import networkx as nx
 import matplotlib.pyplot as plt
+from scipy.stats import kstest
 import pickle
 
 
 class NN():
     def __init__(self, nodes: list):
         self.nodes = nodes
+        self.tns = sum(nodes)
         self.activations = [[0 for i in range(node)] for node in nodes]
         self.nweights = sum([self.nodes[i] * self.nodes[i + 1] for i in
                              range(len(self.nodes) - 1)])  # nodes[0]*nodes[1]+nodes[1]*nodes[2]+nodes[2]*nodes[3]
@@ -83,7 +84,104 @@ class NN():
                         self.weights[i - 1][j][k] = 0.
         if fold is not None:
             mat = self.from_list_to_matrix()
-            graph = nx.from_numpy_matrix(mat, create_using=nx.DiGraph)
+            # graph = nx.from_numpy_matrix(mat, create_using=nx.DiGraph)
+            graph = nx.from_numpy_array(mat, create_using=nx.DiGraph)
+            plt.clf()
+            pos = self.nxpbiwthtaamfalaiwftb(graph)
+            nx.draw(graph, pos=pos, with_labels=True, font_weight='bold')
+            # print("saving")
+            plt.savefig(fold + "_init.png")
+
+    def from_list_to_matrix(self):
+        matrix = np.zeros((sum(self.nodes), sum(self.nodes)))
+        # set inputs
+        for i in range(1, len(self.nodes)):
+            for j in range(self.nodes[i]):
+                for k in range(self.nodes[i - 1]):
+                    ix = k + sum(self.nodes[:i - 1])
+                    ox = j + (sum(self.nodes[:i]))
+                    matrix[ix][ox] = self.weights[i - 1][j][k]
+        return matrix
+
+
+class FNN():
+    def __init__(self, nodes: list):
+        self.nodes = nodes
+        self.activations = [[0 for i in range(node)] for node in nodes]
+        self.nweights = sum([self.nodes[i] * self.nodes[i + 1] for i in
+                             range(len(self.nodes) - 1)])  # nodes[0]*nodes[1]+nodes[1]*nodes[2]+nodes[2]*nodes[3]
+
+        self.weights = [[] for _ in range(len(self.nodes) - 1)]
+
+    def activate(self, inputs):
+        self.activations[0] = [np.tanh(x) for x in inputs]
+        for i in range(1, len(self.nodes)):
+            self.activations[i] = [0. for _ in range(self.nodes[i])]
+            for j in range(self.nodes[i]):
+                sum = 0  # self.weights[i - 1][j][0]
+                for k in range(self.nodes[i - 1]):
+                    sum += self.activations[i - 1][k - 1] * self.weights[i - 1][j][k]
+                self.activations[i][j] = sum  # np.tanh(sum)
+        return np.array(self.activations[-1])
+
+    def set_weights(self, weights):
+        # self.weights = [[] for _ in range(len(self.nodes) - 1)]
+        c = 0
+        for i in range(1, len(self.nodes)):
+            self.weights[i - 1] = [[0 for _ in range(self.nodes[i - 1])] for __ in range(self.nodes[i])]
+            for j in range(self.nodes[i]):
+                for k in range(self.nodes[i - 1]):
+                    self.weights[i - 1][j][k] = weights[c]
+                    c += 1
+        # print(c)
+
+    def get_list_weights(self):
+        wghts = []
+        for i in range(1, len(self.nodes)):
+            for j in range(self.nodes[i]):
+                for k in range(self.nodes[i - 1]):
+                    wghts.append(np.abs(self.weights[i - 1][j][k]))
+        return wghts
+
+    def nx_pos_because_it_was_too_hard_to_add_a_multipartite_from_a_list_as_it_works_for_the_bipartite(self, G):
+        pos = {}
+        nodes_G = list(G)
+        input_space = 1.75 / self.nodes[0]
+        output_space = 1.75 / self.nodes[-1]
+
+        for i in range(self.nodes[0]):
+            pos[i] = np.array([-1., i * input_space])
+
+        c = 0
+        for i in range(self.nodes[0] + self.nodes[1], sum(self.nodes)):
+            pos[i] = np.array([1, c * output_space])
+            c += 1
+
+        center_node = []
+        for n in nodes_G:
+            if not n in pos:
+                center_node.append(n)
+
+        center_space = 1.75 / len(center_node)
+        for i in range(len(center_node)):
+            pos[center_node[i]] = np.array([0, i * center_space])
+        return pos
+
+    def nxpbiwthtaamfalaiwftb(self, G):
+        return self.nx_pos_because_it_was_too_hard_to_add_a_multipartite_from_a_list_as_it_works_for_the_bipartite(G)
+
+    def nn_prune_weights(self, prune_ratio, fold=None):
+        wghts_abs = self.get_list_weights()
+        thr = np.percentile(wghts_abs, prune_ratio)
+        for i in range(1, len(self.nodes)):
+            for j in range(self.nodes[i]):
+                for k in range(self.nodes[i - 1]):
+                    if np.abs(self.weights[i - 1][j][k]) <= thr:
+                        self.weights[i - 1][j][k] = 0.
+        if fold is not None:
+            mat = self.from_list_to_matrix()
+            # graph = nx.from_numpy_matrix(mat, create_using=nx.DiGraph)
+            graph = nx.from_numpy_array(mat, create_using=nx.DiGraph)
             plt.clf()
             pos = self.nxpbiwthtaamfalaiwftb(graph)
             nx.draw(graph, pos=pos, with_labels=True, font_weight='bold')
@@ -119,49 +217,11 @@ class HNN(NN):
                     self.hrules[i - 1][j][k] = [hrules[c + i] for i in range(4)]
                     c += 4
 
-    def get_hrules(self):
-        # self.hrules = [[] for _ in range(len(self.nodes) - 1)]
-        flat_rules = []
-        c = 0
-        for i in range(1, len(self.nodes)):
-            # self.hrules[i - 1] = [[0 for a in range(self.nodes[i - 1])] for b in range(self.nodes[i])]
-            for j in range(self.nodes[i]):
-                for k in range(self.nodes[i - 1]):
-                    for l in range(4):
-                        flat_rules.append(self.hrules[i - 1][j][k][l])
-                        c += 1
-        return flat_rules
-
-    def get_hrules_for_kind(self):
-        # self.hrules = [[] for _ in range(len(self.nodes) - 1)]
-        flat_rules = [[] for i in range(4)]
-        c = 0
-        for i in range(1, len(self.nodes)):
-            # self.hrules[i - 1] = [[0 for a in range(self.nodes[i - 1])] for b in range(self.nodes[i])]
-            for j in range(self.nodes[i]):
-                for k in range(self.nodes[i - 1]):
-                    for l in range(4):
-                        flat_rules[l].append(self.hrules[i - 1][j][k][l])
-                        c += 1
-        return flat_rules
-
-    def get_rules_for_weights(self):
-        flat_rules = [[] for i in range(self.nweights)]
-        c = 0
-        for i in range(1, len(self.nodes)):
-            # self.hrules[i - 1] = [[0 for a in range(self.nodes[i - 1])] for b in range(self.nodes[i])]
-            for j in range(self.nodes[i]):
-                for k in range(self.nodes[i - 1]):
-                    for l in range(4):
-                        flat_rules[c].append(self.hrules[i - 1][j][k][l])
-                    c += 1
-        return flat_rules
-
     def update_weights(self):
         for l in range(1, len(self.nodes)):
             for o in range(self.nodes[l]):
                 # print(self.hrules[l - 1][o][0])
-                for i in range(self.nodes[l - 1]):
+                for i in range(0, self.nodes[l - 1]):
                     # print(self.hrules[l - 1][o][i])
                     dw = self.eta * (
                             self.hrules[l - 1][o][i][0] * self.activations[l - 1][i - 1] * self.activations[l][o] +
@@ -170,65 +230,8 @@ class HNN(NN):
                             self.hrules[l - 1][o][i][3])
                     self.weights[l - 1][o][i] += dw
 
-    def prune_all_abcd(self, prune_ratio):
-        pToThr = self.get_hrules()
-        thr = np.percentile(pToThr, prune_ratio)
-        ppToThr = [0 if np.abs(p) <= thr else p for p in pToThr]
-        self.set_hrules(ppToThr)
 
-    def prune_kind(self, prune_ratio):
-        pToThr = self.get_hrules_for_kind()
-        ppToThr = [[], [], [], []]
-        for i in range(4):
-            thr = np.percentile(pToThr[i], prune_ratio)
-            ppToThr[i] = [0 if np.abs(p) <= thr else p for p in pToThr[i]]
-        rules = []
-        for i in range(self.nweights):
-            for j in range(4):
-                rules.append(ppToThr[j][i])
-        self.set_hrules(rules)
-
-    def prune_rulee_lhr(self, prune_ratio):
-        pToThr = self.get_hrules_for_kind()
-        ppToThr = [[], [], [], []]
-        for i in range(4):
-            thr = np.percentile(pToThr[i], prune_ratio)
-            ppToThr[i] = [0 if np.abs(p) <= thr else p for p in pToThr[i]]
-        rules = []
-        for i in range(self.nweights):
-            w = []
-            c = 0
-            for j in range(4):
-                w.append(ppToThr[j][i])
-                c = c + 1 if w[-1] == 0 else c
-            for j in range(4):
-                if c <= 2:
-                    rules.append(ppToThr[j][i])
-                else:
-                    rules.append(0)
-
-        self.set_hrules(rules)
-
-    def prune_on_weights(self, prune_ratio):
-        pToThr = self.get_list_weights()
-        rules = self.get_rules_for_weights()
-        thr = np.percentile(pToThr, prune_ratio)
-        ppToThr = [0 if np.abs(w) <= thr else w for w in pToThr]
-        prules = []
-        for c in range(len(rules)):
-            if not ppToThr[c] == 0:
-                for cc in range(4):
-                    prules.append(rules[c][cc])
-            else:
-                for cc in range(4):
-                    prules.append(0)
-               
-
-        self.set_weights(ppToThr)
-        self.set_hrules(prules)
-
-
-class SBM(HNN):
+class RNN(HNN):
     def __init__(self, nodes, prune_ratio, eta, seed, random):
         super().__init__(nodes, eta)
         self.nodes = nodes[:]
@@ -249,30 +252,6 @@ class SBM(HNN):
 
     def reset_weights(self):
         self.weights = np.zeros((self.tns, self.tns), dtype=float)
-
-    def set_sbm_weights(self, weights):
-        assert len(weights) == self.nweights
-        print(self.__dict__)
-        self.weights = np.zeros((self.tns, self.tns))
-        # print("############# "+str(len(hrules)))
-        c = 0
-        # set input to other nodes rules
-        for i in range(self.nodes[0]):
-            for o in range(self.nodes[0], self.tns):
-                self.weights[i, o] = weights[c]
-                c += 1
-        # set Hidden to Hidden nodes rules
-        for i in range(self.nodes[0], self.nodes[0] + self.nodes[1]):
-            for o in range(self.nodes[0], self.nodes[0] + self.nodes[1]):
-                if not i == o:
-                    self.weights[i, o] = weights[c]
-                    c += 1
-        # set H to output nodes rules
-        for i in range(self.nodes[0], self.nodes[0] + self.nodes[1]):
-            for o in range(self.nodes[0] + self.nodes[1], self.tns):
-                if not i == o:
-                    self.weights[i, o] = weights[c]
-                    c += 1
 
     def set_hrules(self, hrules):
         assert len(hrules) == self.nweights * 4
@@ -305,6 +284,29 @@ class SBM(HNN):
                     self.hrules[i, o, 2] = hrules[c + 2]
                     self.hrules[i, o, 3] = hrules[c + 3]
                     c += 4
+
+    def set_sbm_weights(self, weights):
+        assert len(weights) == self.nweights
+        self.weights = np.zeros((self.tns, self.tns))
+        # print("############# "+str(len(hrules)))
+        c = 0
+        # set input to other nodes rules
+        for i in range(self.nodes[0]):
+            for o in range(self.nodes[0], self.tns):
+                self.weights[i, o] = weights[c]
+                c += 1
+        # set Hidden to Hidden nodes rules
+        for i in range(self.nodes[0], self.nodes[0] + self.nodes[1]):
+            for o in range(self.nodes[0], self.nodes[0] + self.nodes[1]):
+                if not i == o:
+                    self.weights[i, o] = weights[c]
+                    c += 1
+        # set H to output nodes rules
+        for i in range(self.nodes[0], self.nodes[0] + self.nodes[1]):
+            for o in range(self.nodes[0] + self.nodes[1], self.tns):
+                if not i == o:
+                    self.weights[i, o] = weights[c]
+                    c += 1
 
     def sanitize_weights(self):
         # clean impossible connections
@@ -359,6 +361,7 @@ class SBM(HNN):
                                         if not n in fired_neurons:  # it fires only if it has not yet fired
                                             self.activations[cn] = np.tanh(
                                                 np.dot(self.activations, self.weights[:, cn]))
+                                            fired_neurons.add(cn)
         return self.activations[self.nodes[0] + self.nodes[1]:self.tns]
 
     def get_weightsToPrune(self):
@@ -393,7 +396,6 @@ class SBM(HNN):
                     self.pruned_synapses.add((i, j))
 
         self.sanitize_weights()
-        print("start to dagging")
         dag, hc = self.dag(fold=fold)
         top_sort = nx.topological_sort(dag)
         self.top_sort = list(top_sort)
@@ -436,7 +438,8 @@ class SBM(HNN):
 
     def cycles(self):
         adj_matrix = np.array(self.weights)
-        graph = nx.from_numpy_matrix(adj_matrix, create_using=nx.DiGraph)
+        # graph = nx.from_numpy_matrix(adj_matrix, create_using=nx.DiGraph)
+        graph = nx.from_numpy_array(adj_matrix, create_using=nx.DiGraph)
         return nx.simple_cycles(graph)
 
     def _add_nodes(self, dag, old_dag, cycles, history_of_cycles, offset):
@@ -591,19 +594,16 @@ class SBM(HNN):
         return self.nx_pos_because_it_was_too_hard_to_add_a_multipartite_from_a_list_as_it_works_for_the_bipartite(G)
 
     def dag(self, fold=None):
-        s = time.time()
-        graph = nx.from_numpy_matrix(np.array(self.weights), create_using=nx.DiGraph)
+        # graph = nx.from_numpy_matrix(np.array(self.weights), create_using=nx.DiGraph)
+        graph = nx.from_numpy_array(np.array(self.weights), create_using=nx.DiGraph)
         adj_matrix = nx.to_dict_of_lists(graph)
-        # print("I have the adj mat "+str(time.time()-s))
         if not fold is None:
             plt.clf()
             pos = self.nxpbiwthtaamfalaiwftb(graph)
             nx.draw(graph, pos=pos, with_labels=True, font_weight='bold')
             # print("saving")
             plt.savefig(fold + "_init.png")
-        cycles_list = list(nx.simple_cycles(graph))
-        # print("I have the cycle list "+str(time.time()-s))
-        cycles = self._merge_equivalent_cycle(cycles_list)
+        cycles = self._merge_equivalent_cycle(list(nx.simple_cycles(graph)))
         history_of_cycles = list()
         dag = None
         offset = 0
@@ -650,7 +650,193 @@ class SBM(HNN):
         return dag, history_of_cycles
 
 
-class SBNN2R(HNN):
+class HNN4R(NN):
+    def __init__(self, nodes, eta=0.1):
+        super().__init__(nodes)
+
+        self.hrules = [[[0, 0, 0, 0] for i in range(node)] for node in nodes]
+        self.eta = eta
+        self.set_weights([0 for _ in range(self.nweights)])
+
+
+    def set_hrules(self, hrules):
+        c = 0
+        for layer in range(len(self.nodes)):
+            for node in range(self.nodes[layer]):
+                if layer == 0:  # input
+                    self.hrules[layer][node][0] = hrules[c]
+                    self.hrules[layer][node][1] = 0  # hrules[c + 1]
+                    self.hrules[layer][node][2] = hrules[c + 1]  # hrules[c + 1]
+                    self.hrules[layer][node][3] = hrules[c + 2]  # hrules[c + 1]
+                    c += 3
+
+                elif layer == (len(self.nodes) - 1):
+                    self.hrules[layer][node][0] = 0
+                    self.hrules[layer][node][1] = hrules[c]  # hrules[c + 1]
+                    self.hrules[layer][node][2] = hrules[c + 1]  # hrules[c + 1]
+                    self.hrules[layer][node][3] = hrules[c + 2]  # hrules[c + 1]
+                    c += 3
+
+                else:
+                    self.hrules[layer][node][0] = hrules[c]
+                    self.hrules[layer][node][1] = hrules[c + 1]  # hrules[c + 1]
+                    self.hrules[layer][node][2] = hrules[c + 2]  # hrules[c + 1]
+                    self.hrules[layer][node][3] = hrules[c + 3]  # hrules[c + 1]
+                    c += 4
+
+    def update_weights(self):
+        for l in range(1, len(self.nodes)):
+            for o in range(self.nodes[l]):
+                # print(self.hrules[l - 1][o][0])
+                for i in range(0, self.nodes[l - 1]):
+                    # print(self.hrules[l - 1][o][i])
+                    dw = (
+                            self.hrules[l - 1][i - 1][2] * self.hrules[l][o][2] * self.activations[l - 1][i - 1] *
+                            self.activations[l][o] +  # both
+                            self.hrules[l][o][1] * self.activations[l][o] +  # post
+                            self.hrules[l - 1][i - 1][0] * self.activations[l - 1][i - 1] +  # pre
+                            self.hrules[l][o][3] * self.hrules[l - 1][i - 1][3])
+                    self.weights[l - 1][o][i] += self.eta * dw
+
+class HNN4Rauto(NN):
+    def __init__(self, nodes, eta=0.1, ahl=10, rst=3):
+        super().__init__(nodes)
+        assert rst < ahl, "ratio of stability test must be smaller than activation history length"
+        self.hrules = [[[0, 0, 0, 0] for i in range(node)] for node in nodes]
+        self.eta = eta
+        self.set_weights([0 for _ in range(self.nweights)])
+        #self.hrules = np.array((self.tns, 4), dtype=float)
+        self.nins = self.tns - self.nodes[0]  # non input nodes
+        self.act_history = np.zeros((ahl, self.nins), dtype=float)
+        self.ahl = ahl  # activation history length
+        self.iah = 0  # index of activation history
+        self.rst = rst  # ratio of stability test
+        self.stable_nodes = set()
+
+    def set_hrules(self, hrules):
+        c = 0
+        for layer in range(len(self.nodes)):
+            for node in range(self.nodes[layer]):
+                if layer == 0:  # input
+
+                    self.hrules[layer][node][0] = hrules[c]
+                    self.hrules[layer][node][1] = 0  # hrules[c + 1]
+                    self.hrules[layer][node][2] = hrules[c + 1]  # hrules[c + 1]
+                    self.hrules[layer][node][3] = hrules[c + 2]  # hrules[c + 1]
+                    #self.hrules[layer][node][4] = hrules[c + 3]  # hrules[c + 1]
+                    c += 3
+
+                elif layer == (len(self.nodes) - 1):
+                    self.hrules[layer][node][0] = 0
+                    self.hrules[layer][node][1] = hrules[c]  # hrules[c + 1]
+                    self.hrules[layer][node][2] = hrules[c + 1]  # hrules[c + 1]
+                    self.hrules[layer][node][3] = hrules[c + 2]  # hrules[c + 1]
+                    #self.hrules[layer][node][4] = hrules[c + 3]  # hrules[c + 1]
+
+                    c += 3
+
+                else:
+                    self.hrules[layer][node][0] = hrules[c]
+                    self.hrules[layer][node][1] = hrules[c + 1]  # hrules[c + 1]
+                    self.hrules[layer][node][2] = hrules[c + 2]  # hrules[c + 1]
+                    self.hrules[layer][node][3] = hrules[c + 3]  # hrules[c + 1]
+                    #self.hrules[layer][node][4] = hrules[c + 3]  # hrules[c + 1]
+
+                    c += 4
+
+    def update_weights(self):
+        for l in range(1, len(self.nodes)):
+            for o in range(self.nodes[l]):
+                # print(self.hrules[l - 1][o][0])
+                for i in range(0, self.nodes[l - 1]):
+                    # print(self.hrules[l - 1][o][i])
+                    # dw = (
+                    #         self.hrules[l - 1][i - 1][2] * self.hrules[l][o][2] * self.activations[l - 1][i - 1] *
+                    #         self.activations[l][o] +  # both
+                    #         self.hrules[l][o][1] * self.activations[l][o] +  # post
+                    #         self.hrules[l - 1][i - 1][0] * self.activations[l - 1][i - 1] +  # pre
+                    #         self.hrules[l][o][3] * self.hrules[l - 1][i - 1][3])
+                    # if self.hrules[l][o][3] == self.hrules[l - 1][i - 1][3] == 1:
+                    #     if self.hrules[l - 1][i - 1][2] == self.hrules[l][o][2] == 1:
+                    #         dw -= (self.activations[l - 1][i - 1] * self.activations[l][o]) #
+                    #     else:
+                    #         dw -= 1
+
+                    dw = self.hrules[l][o][1] * self.activations[l][o] + self.hrules[l - 1][i - 1][0] * \
+                         self.activations[l - 1][i - 1]  # pre and post if one is blocked is set to 0
+                    if not (self.hrules[l - 1][i - 1][2] == self.hrules[l][o][2] == 1):  # if not both C are null
+                        dw += self.hrules[l - 1][i - 1][2] * self.hrules[l][o][2] * self.activations[l - 1][i - 1] * \
+                              self.activations[l][o]
+                    if not (self.hrules[l][o][3] == self.hrules[l - 1][i - 1][3] == 1):  # if not both D are null
+                        dw += self.hrules[l][o][3] * self.hrules[l - 1][i - 1][3]
+
+                    self.weights[l - 1][o][i] += self.eta * dw
+
+    def store_activation(self):
+        if self.iah < self.ahl:
+            self.act_history[self.iah] = self._copy_act()
+            self.iah += 1
+        if self.iah == self.ahl:
+            self.act_history = np.vstack((self.act_history,self._copy_act()))[1:]
+            self.prune_stable_nodes()
+
+    def _copy_act(self):
+        tmp = []
+        for i in range(1, len(self.nodes)):
+            for j in range(self.nodes[i]):
+                tmp.append(self.activations[i][j])
+        return np.array(tmp)
+
+    def check_stability(self):
+        # last_act = self._copy_act()
+        stability = np.zeros(self.nins, dtype=np.int8)
+        x = self.act_history.transpose()[:, :self.ahl - self.rst]
+        y = self.act_history.transpose()[:, self.ahl - self.rst:]
+        #print((self.act_history.shape, x.shape,y.shape))
+        for i in range(self.nins):
+            if i not in self.stable_nodes:
+                stability[i] = 1 if kstest(y[i], x[i], method="asymp")[1] > 0.05 else 0
+                if stability[i] == 1:
+                    self.stable_nodes.add(i)
+            else:
+                stability[i] = 1
+
+        return stability
+
+    def get_hrules_for_nodes(self):
+        # self.hrules = [[] for _ in range(len(self.nodes) - 1)]
+        flat_rules = []
+        c = 0
+        for layer in range(1, len(self.nodes)):
+            for node in range(self.nodes[layer]):
+                tmp = []
+                for l in range(4):
+                        tmp.append(self.hrules[layer][node][l])
+                        c += 1
+                flat_rules.append(tmp[:])
+        return flat_rules
+
+    def prune_stable_nodes(self):
+        stability = self.check_stability()
+        hrules = self.get_hrules_for_nodes()
+        #print(len(hrules))
+        #print(len(stability))
+        for i in range(self.nins):
+            if stability[i] == 1:
+                hrules[i] = self.prune(hrules[i])
+
+    def prune(self, hrules):
+        # prune A if the
+        #print(hrules)
+        hrules[0] = 0
+        hrules[1] = 0
+        hrules[2] = 1
+        hrules[3] = 1
+
+        return hrules
+
+
+class SBNN4R(HNN):
     def __init__(self, nodes, prune_ratio, eta, seed, random):
         super().__init__(nodes, eta)
         self.nodes = nodes[:]
@@ -660,7 +846,7 @@ class SBNN2R(HNN):
         self.nweights = nodes[0] * nodes[-1] + nodes[0] * nodes[1] + (nodes[1] ** 2 - nodes[1]) + nodes[1] * nodes[2]
 
         self.weights = np.zeros((self.tns, self.tns), dtype=float)
-        self.hrules = np.array((self.tns, 2), dtype=float)
+        self.hrules = np.array((self.tns, 4), dtype=float)
         self.activations = np.zeros(self.tns)
         self.prune_flag = False
         self.pruned_synapses = set()
@@ -673,24 +859,31 @@ class SBNN2R(HNN):
         self.weights = np.zeros((self.tns, self.tns), dtype=float)
 
     def set_hrules(self, hrules):
-        assert len(hrules) == self.nodes[0] + 2 * self.nodes[1] + self.nodes[2]
-        self.hrules = np.zeros((self.tns, 2))
+        assert len(hrules) == 3 * self.nodes[0] + 4 * self.nodes[1] + 3 * self.nodes[2]
+        self.hrules = np.zeros((self.tns, 4))
         # print("############# "+str(len(hrules)))
         c = 0
         # set input to other nodes rules
         for n in range(self.nodes[0]):
             self.hrules[n, 0] = hrules[c]
             self.hrules[n, 1] = 0  # hrules[c + 1]
-            c += 1
+            self.hrules[n, 2] = hrules[c + 1]  # hrules[c + 1]
+            self.hrules[n, 3] = hrules[c + 2]  # hrules[c + 1]
+
+            c += 3
         # set Hidden to Hidden nodes rules
         for n in range(self.nodes[0], self.nodes[0] + self.nodes[1]):
             self.hrules[n, 0] = hrules[c]
             self.hrules[n, 1] = hrules[c + 1]
-            c += 2
+            self.hrules[n, 2] = hrules[c + 2]  # hrules[c + 1]
+            self.hrules[n, 3] = hrules[c + 3]  # hrules[c + 1]
+            c += 4
         # set H to output nodes rules
         for n in range(self.nodes[0] + self.nodes[1], self.tns):
             self.hrules[n, 0] = 0  # hrules[c]
             self.hrules[n, 1] = hrules[c]
+            self.hrules[n, 2] = hrules[c + 1]  # hrules[c + 1]
+            self.hrules[n, 3] = hrules[c + 2]  # hrules[c + 1]
             c += 1
 
     def sanitize_weights(self):
@@ -773,9 +966,8 @@ class SBNN2R(HNN):
 
     def prune_weights(self, fold=None):
         wsToThr = self.get_weightsToPrune()
-        # upw = np.abs(np.triu(wsToThr).flat)
         thr = np.percentile(wsToThr, self.prune_ratio)
-        # print(thr)
+
         self.prune_flag = True
 
         for i in range(self.tns):
@@ -798,13 +990,16 @@ class SBNN2R(HNN):
             else:
                 self.weights[i, o] = self.weights[i, o] + self.eta * (
                         self.hrules[i, 0] * self.activations[i] +
-                        self.hrules[o, 1] * self.activations[o]
+                        self.hrules[o, 1] * self.activations[o] +
+                        self.hrules[i, 2] * self.hrules[o, 2] * self.activations[o] * self.activations[i] +
+                        self.hrules[i, 3] * self.hrules[o, 3]
                 )
         self.sanitize_weights()
 
     def cycles(self):
         adj_matrix = np.array(self.weights)
-        graph = nx.from_numpy_matrix(adj_matrix, create_using=nx.DiGraph)
+        # graph = nx.from_numpy_matrix(adj_matrix, create_using=nx.DiGraph)
+        graph = nx.from_array_matrix(adj_matrix, create_using=nx.DiGraph)
         return nx.simple_cycles(graph)
 
     def _add_nodes(self, dag, old_dag, cycles, history_of_cycles, offset):
@@ -959,6 +1154,7 @@ class SBNN2R(HNN):
         return self.nx_pos_because_it_was_too_hard_to_add_a_multipartite_from_a_list_as_it_works_for_the_bipartite(G)
 
     def dag(self, fold=None):
+        # graph = nx.from_numpy_matrix(np.array(self.weights), create_using=nx.DiGraph)
         graph = nx.from_numpy_matrix(np.array(self.weights), create_using=nx.DiGraph)
         adj_matrix = nx.to_dict_of_lists(graph)
         if not fold is None:
@@ -1014,13 +1210,47 @@ class SBNN2R(HNN):
         return dag, history_of_cycles
 
 
+class PNN(NN):
+    def __init__(self, nodes: list, prule: list, eta: float):
+        super().__init__(nodes)
+        self.prule = prule
+        self.set_weights([0 for _ in range(self.nweights)])
+        self.eta = eta
+        self.networks = self.weights.copy()
+        c = 0
+        for i in range(1, len(self.nodes)):
+            self.networks[i - 1] = [[0 for _ in range(self.nodes[i - 1])] for __ in range(self.nodes[i])]
+            for j in range(self.nodes[i]):
+                for k in range(self.nodes[i - 1]):
+                    self.networks[i - 1][j][k] = FNN(prule)
+                    c += 1
+        self.mlc = FNN(prule).nweights
+
+    def set_prule_weights(self, weights):
+        c = 0
+        for i in range(1, len(self.nodes)):
+            for j in range(self.nodes[i]):
+                for k in range(self.nodes[i - 1]):
+                    self.networks[i - 1][j][k].set_weights(weights[c])
+                    c += 1
+
+    def update_weights(self):
+        for l in range(1, len(self.nodes)):
+            for o in range(self.nodes[l]):
+                for i in range(0, self.nodes[l - 1]):
+                    ndw = self.networks[l - 1][o][i].activate([
+                        self.activations[l - 1][i] * self.activations[l][o],
+                        self.activations[l][o],
+                        self.activations[l - 1][i], 1])[0]
+                    # print(dw)
+
+                    self.weights[l - 1][o][i] += self.eta * ndw
+
+
 if __name__ == "__main__":
-    a = HNN([7, 5, 5], 0.01)
-    rng = np.random.default_rng(0)
-    a.set_hrules(rng.uniform(0, 1, a.nweights * 4))
-    v = a.hrules
-    nvf = np.array(np.array(v).flat)
-    print(nvf.shape)
-    nvf = np.array(v)
-    print(nvf.shape)
-    print(nvf[:, :, :4].shape)
+    nn = PNN([8, 5, 4], [4, 1, 1])
+    a = np.array([np.random.random() for i in range(60 * 5)])
+    print((nn.nweights, nn.mlc))
+    t = a.reshape((nn.nweights, nn.mlc))
+    nn.set_prule_weights(t)
+    nn.activate([1, 2, 3, 4, 5, 6, 7, 8])

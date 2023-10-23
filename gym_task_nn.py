@@ -6,19 +6,12 @@ import functools
 from random import Random
 from multiprocessing import Pool
 import pickle
-import sys
-import os
-import math
 
-
-def eval(ds, render=False):
-    x = ds[0]
-    hnodes = ds[1]
+def eval(x, render=False):
     cumulative_rewards = []
     task = gym.make("LunarLander-v2")
-    agent = NN([8, hnodes, 4])
+    agent = NN([8, 5, 4])
     agent.set_weights(x)
-    agent.nn_prune_weights(ds[2])
     for i in range(100):
         cumulative_rewards.append(0)
         done = False
@@ -51,68 +44,41 @@ def generator_wrapper(func):
 
     return _generator
 
-
-def parallel_val(candidates, hnodes, pr_ratio):
+def parallel_val(candidates):
     with Pool(20) as p:
-        return p.map(eval, [[c, hnodes, pr_ratio] for c in candidates])
-
-
-def experiment_launcher(config):
-    seed = config["seed"]
-    hnodes = config["hnodes"]
-    pr_ratio = config["pr_ratio"]
-    os.makedirs("./results_NN/", exist_ok=True)
-    os.makedirs("./results_NN/" + str(hnodes), exist_ok=True)
-    os.makedirs("./results_NN/" + str(hnodes) + "/" + str(seed), exist_ok=True)
-    os.makedirs("./results_NN/" + str(hnodes) + "/" + str(pr_ratio) + "/" + str(seed), exist_ok=True)
-    fka = NN([8, hnodes, 4])
-    args = {}
-    args["num_vars"] = fka.nweights  # Number of dimensions of the search space
-    args["max_generations"] = (2000-args["pop_size"]) // args["num_offspring"] + 1
-    args["sigma"] = 1.0  # default standard deviation
-
-    args["num_offspring"] = 4 + int(math.floor(3 * math.log(fka.nweights)))  # lambda
-    args["pop_size"] = int(math.floor(args["num_offspring"] / 2))  # mu
-    args["pop_init_range"] = [-1, 1]  # Range for the initial population
-    args["hnodes"] = hnodes
-    args["seed"] = seed
-
-    random = Random(seed)
-    es = cmaes(generator(random, args),
-               args["sigma"],
-               {'popsize': args["num_offspring"],
-                'seed': seed,
-                'CMA_mu': args["pop_size"]})
-    gen = 0
-    logs = []
-    while gen <= args["max_generations"]:
-        candidates = es.ask()  # get list of new solutions
-        fitnesses = parallel_val(candidates, hnodes, pr_ratio)
-        log = "generation " + str(gen) + "  " + str(min(fitnesses)) + "  " + str(np.mean(fitnesses))
-        with open("./results_NN/" + str(hnodes) + "/" + str(pr_ratio) + "/" + str(seed) + "/best_" + str(
-                gen) + ".pkl", "wb") as f:
-            pickle.dump(candidates[np.argmin(fitnesses)], f)
-        logs.append(log)
-        print(log)
-        es.tell(candidates, fitnesses)
-        gen += 1
-    final_pop = np.asarray(es.ask())
-    final_pop_fitnesses = np.asarray(parallel_val(final_pop, hnodes, pr_ratio))
-
-    best_guy = es.best.x
-    best_fitness = es.best.f
-
-    with open("./results_NN/" + str(hnodes) + "/" + str(pr_ratio) + "/" + str(seed) + "/" + str(
-            best_fitness) + ".pkl", "wb") as f:
-        pickle.dump(best_guy, f)
-    with open("./results_NN/" + str(hnodes) + "/" + str(pr_ratio) + "/" + str(seed) + "/log.txt", "w") as f:
-        for l in logs:
-            f.write(l + "\n")
-
+        return p.map(eval, candidates)
 
 if __name__ == "__main__":
     args = {}
-    seed = int(sys.argv[1])
-    for hn in range(5, 10):
-        for pr_ratio in range(20, 100, 20):
-            experiment_launcher({"seed": seed, "hnodes": hn, "pr_ratio": pr_ratio})
+    fka = NN([8, 5, 4])
+    rng = np.random.default_rng()
+    #eval(rng.random(fka.nweights*4), render=True)
+
+
+    args["num_vars"] = fka.nweights  # Number of dimensions of the search space
+    args["max_generations"] = 50
+    args["sigma"] = 1.0  # default standard deviation
+    args["pop_size"] = 4  # mu
+    args["num_offspring"] = 20  # lambda
+    args["pop_init_range"] = [0, 1]  # Range for the initial population
+
+    random = Random(0)
+    es = cmaes(generator(random, args),
+               args["sigma"],
+               {'popsize': args["num_offspring"],
+                'seed': 0,
+                'CMA_mu': args["pop_size"]})
+    gen = 0
+    while gen <= args["max_generations"]:
+        candidates = es.ask()  # get list of new solutions
+        fitnesses = parallel_val(candidates)
+        print("generation "+str(gen)+"  "+str(min(fitnesses))+"  "+str(np.mean(fitnesses)))
+        es.tell(candidates, fitnesses)
+        gen += 1
+    final_pop = np.asarray(es.ask())
+    final_pop_fitnesses = np.asarray(parallel_val(final_pop))
+
+    best_guy = es.best.x
+    best_fitness = es.best.f
+    with open("./nn_test_"+str(best_fitness)+".pkl", "wb") as f:
+        pickle.dump(best_guy, f)
