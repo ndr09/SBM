@@ -227,6 +227,191 @@ class HNN(NN):
         self.set_weights(ppToThr)
         self.set_hrules(prules)
 
+class HNN4R(NN):
+    def __init__(self, nodes, eta=0.1):
+        super().__init__(nodes)
+
+        self.hrules = [[[0, 0, 0, 0] for i in range(node)] for node in nodes]
+        self.eta = eta
+        self.set_weights([0 for _ in range(self.nweights)])
+
+
+    def set_hrules(self, hrules):
+        c = 0
+        for layer in range(len(self.nodes)):
+            for node in range(self.nodes[layer]):
+                if layer == 0:  # input
+                    self.hrules[layer][node][0] = hrules[c]
+                    self.hrules[layer][node][1] = 0  # hrules[c + 1]
+                    self.hrules[layer][node][2] = hrules[c + 1]  # hrules[c + 1]
+                    self.hrules[layer][node][3] = hrules[c + 2]  # hrules[c + 1]
+                    c += 3
+
+                elif layer == (len(self.nodes) - 1): #output
+                    self.hrules[layer][node][0] = 0
+                    self.hrules[layer][node][1] = hrules[c]  # hrules[c + 1]
+                    self.hrules[layer][node][2] = hrules[c + 1]  # hrules[c + 1]
+                    self.hrules[layer][node][3] = hrules[c + 2]  # hrules[c + 1]
+                    c += 3
+
+                else:
+                    self.hrules[layer][node][0] = hrules[c]
+                    self.hrules[layer][node][1] = hrules[c + 1]  # hrules[c + 1]
+                    self.hrules[layer][node][2] = hrules[c + 2]  # hrules[c + 1]
+                    self.hrules[layer][node][3] = hrules[c + 3]  # hrules[c + 1]
+                    c += 4
+
+    def update_weights(self):
+        for l in range(1, len(self.nodes)):
+            for o in range(self.nodes[l]):
+                # print(self.hrules[l - 1][o][0])
+                for i in range(0, self.nodes[l - 1]):
+                    # print(self.hrules[l - 1][o][i])
+                    dw = (
+                            self.hrules[l - 1][i - 1][2] * self.hrules[l][o][2] * self.activations[l - 1][i - 1] *
+                            self.activations[l][o] +  # both
+                            self.hrules[l][o][1] * self.activations[l][o] +  # post
+                            self.hrules[l - 1][i - 1][0] * self.activations[l - 1][i - 1] +  # pre
+                            self.hrules[l][o][3] * self.hrules[l - 1][i - 1][3])
+                    self.weights[l - 1][o][i] += self.eta * dw
+
+class HNN4Rauto(NN):
+    def __init__(self, nodes, eta=0.1, ahl=10, rst=3):
+        super().__init__(nodes)
+        assert rst < ahl, "ratio of stability test must be smaller than activation history length"
+        self.hrules = [[[0, 0, 0, 0] for i in range(node)] for node in nodes]
+        self.eta = eta
+        self.set_weights([0 for _ in range(self.nweights)])
+        #self.hrules = np.array((self.tns, 4), dtype=float)
+        self.nins = self.tns - self.nodes[0]  # non input nodes
+        self.act_history = np.zeros((ahl, self.nins), dtype=float)
+        self.ahl = ahl  # activation history length
+        self.iah = 0  # index of activation history
+        self.rst = rst  # ratio of stability test
+        self.stable_nodes = set()
+
+    def set_hrules(self, hrules):
+        c = 0
+        for layer in range(len(self.nodes)):
+            for node in range(self.nodes[layer]):
+                if layer == 0:  # input
+
+                    self.hrules[layer][node][0] = hrules[c]
+                    self.hrules[layer][node][1] = 0  # hrules[c + 1]
+                    self.hrules[layer][node][2] = hrules[c + 1]  # hrules[c + 1]
+                    self.hrules[layer][node][3] = hrules[c + 2]  # hrules[c + 1]
+                    #self.hrules[layer][node][4] = hrules[c + 3]  # hrules[c + 1]
+                    c += 3
+
+                elif layer == (len(self.nodes) - 1):
+                    self.hrules[layer][node][0] = 0
+                    self.hrules[layer][node][1] = hrules[c]  # hrules[c + 1]
+                    self.hrules[layer][node][2] = hrules[c + 1]  # hrules[c + 1]
+                    self.hrules[layer][node][3] = hrules[c + 2]  # hrules[c + 1]
+                    #self.hrules[layer][node][4] = hrules[c + 3]  # hrules[c + 1]
+
+                    c += 3
+
+                else:
+                    self.hrules[layer][node][0] = hrules[c]
+                    self.hrules[layer][node][1] = hrules[c + 1]  # hrules[c + 1]
+                    self.hrules[layer][node][2] = hrules[c + 2]  # hrules[c + 1]
+                    self.hrules[layer][node][3] = hrules[c + 3]  # hrules[c + 1]
+                    #self.hrules[layer][node][4] = hrules[c + 3]  # hrules[c + 1]
+
+                    c += 4
+
+    def update_weights(self):
+        for l in range(1, len(self.nodes)):
+            for o in range(self.nodes[l]):
+                # print(self.hrules[l - 1][o][0])
+                for i in range(0, self.nodes[l - 1]):
+                    # print(self.hrules[l - 1][o][i])
+                    # dw = (
+                    #         self.hrules[l - 1][i - 1][2] * self.hrules[l][o][2] * self.activations[l - 1][i - 1] *
+                    #         self.activations[l][o] +  # both
+                    #         self.hrules[l][o][1] * self.activations[l][o] +  # post
+                    #         self.hrules[l - 1][i - 1][0] * self.activations[l - 1][i - 1] +  # pre
+                    #         self.hrules[l][o][3] * self.hrules[l - 1][i - 1][3])
+                    # if self.hrules[l][o][3] == self.hrules[l - 1][i - 1][3] == 1:
+                    #     if self.hrules[l - 1][i - 1][2] == self.hrules[l][o][2] == 1:
+                    #         dw -= (self.activations[l - 1][i - 1] * self.activations[l][o]) #
+                    #     else:
+                    #         dw -= 1
+
+                    dw = self.hrules[l][o][1] * self.activations[l][o] + self.hrules[l - 1][i - 1][0] * \
+                         self.activations[l - 1][i - 1]  # pre and post if one is blocked is set to 0
+                    if not (self.hrules[l - 1][i - 1][2] == self.hrules[l][o][2] == 1):  # if not both C are null
+                        dw += self.hrules[l - 1][i - 1][2] * self.hrules[l][o][2] * self.activations[l - 1][i - 1] * \
+                              self.activations[l][o]
+                    if not (self.hrules[l][o][3] == self.hrules[l - 1][i - 1][3] == 1):  # if not both D are null
+                        dw += self.hrules[l][o][3] * self.hrules[l - 1][i - 1][3]
+
+                    self.weights[l - 1][o][i] += self.eta * dw
+
+    def store_activation(self):
+        if self.iah < self.ahl:
+            self.act_history[self.iah] = self._copy_act()
+            self.iah += 1
+        if self.iah == self.ahl:
+            self.act_history = np.vstack((self.act_history,self._copy_act()))[1:]
+            self.prune_stable_nodes()
+
+    def _copy_act(self):
+        tmp = []
+        for i in range(1, len(self.nodes)):
+            for j in range(self.nodes[i]):
+                tmp.append(self.activations[i][j])
+        return np.array(tmp)
+
+    def check_stability(self):
+        # last_act = self._copy_act()
+        stability = np.zeros(self.nins, dtype=np.int8)
+        x = self.act_history.transpose()[:, :self.ahl - self.rst]
+        y = self.act_history.transpose()[:, self.ahl - self.rst:]
+        #print((self.act_history.shape, x.shape,y.shape))
+        for i in range(self.nins):
+            if i not in self.stable_nodes:
+                stability[i] = 1 if kstest(y[i], x[i], method="asymp")[1] > 0.05 else 0
+                if stability[i] == 1:
+                    self.stable_nodes.add(i)
+            else:
+                stability[i] = 1
+
+        return stability
+
+    def get_hrules_for_nodes(self):
+        # self.hrules = [[] for _ in range(len(self.nodes) - 1)]
+        flat_rules = []
+        c = 0
+        for layer in range(1, len(self.nodes)):
+            for node in range(self.nodes[layer]):
+                tmp = []
+                for l in range(4):
+                        tmp.append(self.hrules[layer][node][l])
+                        c += 1
+                flat_rules.append(tmp[:])
+        return flat_rules
+
+    def prune_stable_nodes(self):
+        stability = self.check_stability()
+        hrules = self.get_hrules_for_nodes()
+        #print(len(hrules))
+        #print(len(stability))
+        for i in range(self.nins):
+            if stability[i] == 1:
+                hrules[i] = self.prune(hrules[i])
+
+    def prune(self, hrules):
+        # prune A if the
+        #print(hrules)
+        hrules[0] = 0
+        hrules[1] = 0
+        hrules[2] = 1
+        hrules[3] = 1
+
+        return hrules
+
 
 class SBM(HNN):
     def __init__(self, nodes, prune_ratio, eta, seed, random):

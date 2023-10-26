@@ -3,3 +3,5 @@ networkx
 cma
 numpy
 matplotlib
+torch
+torchvision

@@ -1,8 +1,6 @@
-import argparse
 import math
 import os
 import sys
-from cma import CMAEvolutionStrategy as cmaes
 import gym
 from network5 import SBMD4R
 import numpy as np
@@ -10,15 +8,14 @@ import functools
 from random import Random
 from multiprocessing import Pool
 import pickle
-import matplotlib.pyplot as plt
-
+from optimizer import LMMAES
 
 def eval(data, render=False):
     x = data[0]
     args = data[1]
     cumulative_rewards = []
-    task = gym.make("LunarLander-v2")
-    agent = SBMD4R([8, args["hnodes"], 4], args["prate"], 0.001, args["seed"], False)
+    task = gym.make("CartPole-v1")
+    agent = SBMD4R([4, args["hnodes"], 2], args["prate"], 0.001, args["seed"], False)
     agent.set_hrules(x)
     for i in range(100):
         cumulative_rewards.append(0)
@@ -27,16 +24,11 @@ def eval(data, render=False):
         obs = task.reset()
         # counter = 0
         while not done:
-            output = agent.distance_activation(obs, i < args["ps"][0])
-            print((np.argmax(output), output, agent.activations))
+            output = agent.distance_activation(obs, i<=0)
             if render:
                 task.render()
             obs, rew, done, _ = task.step(np.argmax(output))
             cumulative_rewards[-1] += rew
-        # counter += 1
-        if i in args["ps"]:
-            agent.prune_weights()
-            # agent.eta = 0.
     return -np.mean(cumulative_rewards)
 
 
@@ -56,8 +48,12 @@ def generator_wrapper(func):
 
 def parallel_val(candidates, args):
     # with parallel_backend('multiprocessing'):
-    with Pool(1) as p:
-        return p.map(eval, [[c, args] for c in candidates])
+    # with Pool(8) as p:
+    #     return p.map(eval, [[c, args] for c in candidates])
+    res = []
+    for c in candidates:
+        res.append(eval((c, args)))
+    return res
 
 
 def experiment_launcher(config):
@@ -73,7 +69,7 @@ def experiment_launcher(config):
     os.makedirs("./results_SBMD4r_ll/" + str(ps[0]) + "/" + str(prate) + "/" + str(hnodes) + "/" + str(seed),
                 exist_ok=True)
 
-    fka = SBMD4R([8, hnodes, 4], prate, 0.01, seed, True)
+    fka = SBMD4R([4, hnodes, 2], prate, 0.01, seed, True)
     rng = np.random.default_rng()
     # fka.set_hrules(rng.random(fka.tns * 4))
     args = {}
@@ -82,18 +78,19 @@ def experiment_launcher(config):
 
     args["num_offspring"] = 20  # 4 + int(math.floor(3 * math.log(fka.nweights * 4)))  # lambda
     args["pop_size"] = int(math.floor(args["num_offspring"] / 2))  # mu
-    args["max_generations"] = (10000 - args["pop_size"]) // args["num_offspring"] + 1
+    args["max_generations"] = (200 - args["pop_size"]) // args["num_offspring"] + 1
     args["pop_init_range"] = [-1, 1]  # Range for the initial population
     args["ps"] = ps
     args["prate"] = prate
     args["hnodes"] = hnodes
     args["seed"] = seed
     random = Random(seed)
-    es = cmaes(generator(random, args),
-               args["sigma"],
-               {'popsize': args["num_offspring"],
-                'seed': seed,
-                'CMA_mu': args["pop_size"]})
+    es = LMMAES(args["num_vars"],lambda_=20,mu=10, sigma=1)
+    # cmaes(generator(random, args),
+    #       args["sigma"],
+    #       {'popsize': args["num_offspring"],
+    #        'seed': seed,
+    #        'CMA_mu': args["pop_size"]})
     gen = 0
     logs = []
     while gen <= args["max_generations"]:
@@ -107,10 +104,8 @@ def experiment_launcher(config):
         logs.append(log)
 
         print(log)
-        es.tell(candidates, fitnesses)
+        es.tell(fitnesses)
         gen += 1
-    final_pop = np.asarray(es.ask())
-    final_pop_fitnesses = np.asarray(parallel_val(final_pop, args))
 
     best_guy = es.best.x
     best_fitness = es.best.f
@@ -134,11 +129,11 @@ if __name__ == "__main__":
         seed = int(sys.argv[1])
         for ps in [[1]]:
             for prate in [0]:
-                for hnodes in [9]:
-                    dir = "./results_SBMD4r_ll/" + str(ps[0]) + "/" + str(prate) + "/" + str(hnodes) + "/" + str(seed) + "/"
-                    if not chs(dir):
-                        experiment_launcher({"seed": seed, "prate": prate, "ps": ps, "hnodes": hnodes})
-                        print("ended experiment " + str({"seed": seed, "prate": prate, "ps": ps, "hnodes": hnodes}))
+                for hnodes in [4]:
+                    # dir = None#"./results_SBMD4r_ll/" + str(ps[0]) + "/" + str(prate) + "/" + str(hnodes) + "/" + str(seed) + "/"
+                    # if not chs(dir):
+                    experiment_launcher({"seed": seed, "prate": prate, "ps": ps, "hnodes": hnodes})
+                    print("ended experiment " + str({"seed": seed, "prate": prate, "ps": ps, "hnodes": hnodes}))
     else:
         d = {"seed": 0, "prate": 0, "ps": [101], "hnodes": 5}
         a = SBMD4R([4, 5, 2], 0, 0.01, 0, False)

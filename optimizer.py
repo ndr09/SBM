@@ -1,9 +1,14 @@
-from deap import base, creator, tools, algorithms
 import math
 import torch
-import numpy as np
-import random
-from scipy.special import gamma
+
+
+class Best():
+    def __init__(self, x=None, f=None):
+        self.x = x
+        self.f = f
+
+    def __str__(self):
+        return str(self.x) + " " + str(self.f)
 
 
 # Vanilla LMMAES algorithm
@@ -79,13 +84,13 @@ class LMMAES(object):
         self.y = torch.randn(self.n).float().to(device)
 
         # init sigma, this is my global learning rate
-        self.sigma = sigma if sigma is not None else 0.1
+        self.sigma = sigma if sigma is not None else 1.0
 
         # init the evolution path vector p_sigma
         # it is an exponentially fading record of recent most successful steps
         self.p_sigma = torch.zeros(self.n).float().to(self.device)
 
-        # init the vector esimating the covariance matrix
+        # init the vector estimating the covariance matrix
         self.M = torch.zeros((self.m, self.n)).float().to(self.device)
 
         # init vectors containing the offspring's direction vectors
@@ -97,6 +102,7 @@ class LMMAES(object):
         # init the number of iterations
         self.t = 0
         self.population = []
+        self.best = Best()
 
     def ask(self):
         """
@@ -121,7 +127,7 @@ class LMMAES(object):
             # d[i] is now the mutation given by N(0, C) where C is the covariance matrix
             ind = (self.y + self.sigma * self.d[i]).detach()
 
-            self.population.append(ind.to(self.device))
+            self.population.append(ind.tolist())
         return self.population[:]
 
     def get_sorted_idx(self, fitness):
@@ -131,10 +137,10 @@ class LMMAES(object):
         :return: the ordered list of the indexes of the individuals, ordered by fitness
         """
         # get the ordered list of the indexes of the mu best individuals
-        sorted_idx = [i for _, i in sorted(zip(fitness, range(len(fitness))), reverse=True)][0:self.mu]
+        sorted_idx = [i for _, i in sorted(zip(fitness, range(len(fitness))))][0:self.mu]
         return sorted_idx
 
-    def tell(self,  fitness):
+    def tell(self, fitness):
         """
         Update the parameters of the algorithm
         :param fitness: fitness of the individual in the same order
@@ -143,6 +149,8 @@ class LMMAES(object):
 
         # get the ordered list of the indexes of the mu best individuals
         sorted_idx = self.get_sorted_idx(fitness)
+        if self.best.x is None or self.best.f < fitness[sorted_idx[0]]:
+            self.best = Best(self.population[sorted_idx[0]], fitness[sorted_idx[0]])
         # calculate the weighted sum of the mu best individuals
         weighted_d = torch.zeros((self.mu, self.n)).float().to(self.device)
         weighted_z = torch.zeros((self.mu, self.n)).float().to(self.device)
