@@ -53,6 +53,7 @@ def experiment_launcher(config):
     os.makedirs("./results_vis_HNN4R/" + "/" + str(hnodes) + "/" + str(seed), exist_ok=True)
 
     fka = NHNN([28*28, 100, 100, 100, 10], 0.01)
+    fka.to("cuda")
     rng = np.random.default_rng()
     # fka.set_hrules(rng.random(fka.tns * 4))
     args = {}
@@ -76,7 +77,7 @@ def experiment_launcher(config):
     args["hnodes"] = hnodes
     args["seed"] = seed
     random = Random(seed)
-    es = LMMAES(args["num_vars"], lambda_=10, mu=5, sigma=1)
+    es = LMMAES(args["num_vars"], lambda_=10, mu=5, sigma=1, device="cuda")
 
     # es = cmaes(generator(random, args),
     #            args["sigma"],

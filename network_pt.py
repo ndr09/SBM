@@ -32,13 +32,13 @@ import time
 
 
 class NN(nn.Module):
-    def __init__(self, nodes: list, grad=False):
+    def __init__(self, nodes: list, grad=False, device="cpu"):
         super(NN, self).__init__()
-        self.nodes = nodes
+        self.device = torch.device(device)
+        self.nodes = torch.tensor(nodes).to(self.device)
         self.nweights = sum([self.nodes[i] * self.nodes[i + 1] for i in
                              range(len(self.nodes) - 1)])  # nodes[0]*nodes[1]+nodes[1]*nodes[2]+nodes[2]*nodes[3]
 
-        self.weights = [[] for _ in range(len(self.nodes) - 1)]
         self.networks = []
         self.activations = []
         for i in range(len(nodes) - 1):
@@ -46,16 +46,17 @@ class NN(nn.Module):
         self.set_weights([0. for _ in range(self.nweights)])
         self.double()
 
+
     def forward(self, inputs):
         with torch.no_grad():
             self.activations = []
-            x = inputs
-            self.activations.append(torch.clone(x))
+            x = inputs.to(self.device)
+            self.activations.append(torch.clone(x).to(self.device))
 
             for l in self.networks:
                 x = l(x)
                 self.activations.append(torch.clone(x))
-                x = F.tanh(x)
+                x = torch.tanh(x)
 
             return x
 
@@ -78,7 +79,7 @@ class NN(nn.Module):
                 size = l.size()[0] * l.size()[1] + start
                 params = torch.tensor(weights[start:size])
                 start = size
-                self.networks[i].weight = nn.Parameter(torch.reshape(params, (l.size()[0], l.size()[1])))
+                self.networks[i].weight = nn.Parameter(torch.reshape(params, (l.size()[0], l.size()[1])).to(self.device))
                 i += 1
 
 
@@ -130,12 +131,12 @@ class HNN(NN):
 
 
 class NHNN(NN):
-    def __init__(self, nodes: list, eta: float, hrules=None, grad=False):
-        super(NHNN, self).__init__(nodes, grad=grad)
+    def __init__(self, nodes: list, eta: float, hrules=None, grad=False, device="cpu"):
+        super(NHNN, self).__init__(nodes, grad=grad, device=device)
 
         self.hrules = []
         self.nparams = sum(self.nodes) * 4 - self.nodes[0] - self.nodes[-1]
-        self.eta = eta
+        self.eta = torch.tensor(eta).to(self.device)
         if hrules is not None:
             self.set_hrules(hrules)
 
@@ -164,7 +165,8 @@ class NHNN(NN):
         params = torch.tensor(hrules[start:size])
         tmp = torch.reshape(params, (self.nodes[-1], 3))
         tmp1 = torch.tensor([[0.] for i in range(self.nodes[-1])])
-        self.hrules.append(torch.hstack((tmp1, tmp)))
+        self.hrules.append(torch.hstack((tmp1, tmp)).to(self.device))
+
 
     def update_weights(self):
         weights = self.get_weights()
@@ -175,10 +177,10 @@ class NHNN(NN):
             l = weights[i]
 
             l_size = l.shape
-            activations_i = self.activations[i]
-            activations_i1 = self.activations[i + 1]
-            hrule_i = self.hrules[i]
-            hrule_i1 = self.hrules[i + 1]
+            activations_i = self.activations[i].to(self.device)
+            activations_i1 = self.activations[i + 1].to(self.device)
+            hrule_i = self.hrules[i].to(self.device)
+            hrule_i1 = self.hrules[i + 1].to(self.device)
 
             # Use broadcasting to perform element-wise operations without loops
 

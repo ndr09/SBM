@@ -23,8 +23,8 @@ def eval(data, render=False):
     # print(x.tolist())
     args = data[1]
     cumulative_rewards = []
-    task = gym.make("CartPole-v1")
-    agent = NHNN([4, 4, 2], 0.001)
+    task = gym.make("LunarLander-v2")
+    agent = NHNN([8, 20, 4], 0.001, device="cpu")
     agent.set_hrules(x)
     for i in range(100):
         cumulative_rewards.append(0)
@@ -77,11 +77,11 @@ def experiment_launcher(config):
     os.makedirs("./results_rl_HNN4R/" + "/" + str(hnodes), exist_ok=True)
     os.makedirs("./results_rl_HNN4R/" + "/" + str(hnodes) + "/" + str(seed), exist_ok=True)
 
-    fka = NHNN([4, 4, 2], 0.001)
+    fka = NHNN([8, 100, 4], 0.001)
     rng = np.random.default_rng()
     # fka.set_hrules(rng.random(fka.tns * 4))
     args = {}
-    args["num_vars"] = 3 * (4) + 4 * 4 + 3 * 2  # Number of dimensions of the search space
+    args["num_vars"] = 3 * (8) + 4 * 100 + 3 * 4  # Number of dimensions of the search space
     args["sigma"] = 1.0  # default standard deviation
     args["num_offspring"] = 20  # 4 + int(math.floor(3 * math.log(fka.nweights * 4)))  # lambda
     args["pop_size"] = int(math.floor(args["num_offspring"] / 2))  # mu
