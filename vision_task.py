@@ -8,7 +8,7 @@ import time
 def eval_minst(data):
     x = data[0]
     args = data[1]
-    agent = NHNN([28*28, 100, 100, 100, 10], 0.000001)
+    agent = NHNN([28*28, 100, 100, 100, 10], 0.000001, grad=True)
     agent.set_hrules(x)
     agent.to(agent.device)
     outputs = None

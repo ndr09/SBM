@@ -103,30 +103,23 @@ class HNN(NN):
             start = size
 
     def update_weights(self):
-        print(0)
+
         weights = self.get_weights()
-        print("1")
         for i in range(len(weights)):
-            print("2")
-
             l = weights[i]
-            print("3")
+            activations_i = self.activations[i].to(self.device)
+            activations_i1 = torch.reshape(self.activations[i + 1].to(self.device), (self.activations[i + 1].size()[0],1))
+            hrule_i = self.hrules[i].to(self.device)
+            # la size dovra essere l1, l
+            pre = hrule_i[:,:,0]*activations_i
+            post = hrule_i[:,:,1]*activations_i1
+            C_i = activations_i*hrule_i[:,:,2]
+            C_j = activations_i1*hrule_i[:,:,2]
+            C = C_i*C_j
+            D = hrule_i[:,:,3]
+            dw = pre+post+C+D
+            weights[i] += self.eta*dw
 
-            for k in range(l.size()[1]):  # pre
-                print("4")
-
-                for j in range(l.size()[0]):  # post
-                    print("5")
-
-                    t = time.time()
-                    dw = self.eta * (self.hrules[i][j, k, 0] * self.activations[i][k] +
-                                     self.hrules[i][j, k, 1] * self.activations[i + 1][j] +
-                                     self.hrules[i][j, k, 2] * self.hrules[i][j, k, 2] * self.activations[i + 1][j] *
-                                     self.activations[i][k] +
-                                     self.hrules[i][j, k, 3]
-                                     )
-                    weights[i][j, k] += dw
-                    print(i, j, k, time.time() - t)
         self.set_weights(weights)
 
 

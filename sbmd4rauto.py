@@ -11,7 +11,7 @@ from random import Random
 from multiprocessing import Pool
 import pickle
 import matplotlib.pyplot as plt
-
+import json
 
 def eval(data, render=False):
     x = data[0]
@@ -54,7 +54,7 @@ def generator_wrapper(func):
 def parallel_val(candidates, args):
     # with parallel_backend('multiprocessing'):
     with Pool(2) as p:
-        return p.map(eval, [[c, args] for c in candidates])
+        return p.map(eval, [[c, json.loads(json.dumps(args))] for c in candidates])
 
 
 def experiment_launcher(config):

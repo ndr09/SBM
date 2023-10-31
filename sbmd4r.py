@@ -9,6 +9,7 @@ from random import Random
 from multiprocessing import Pool
 import pickle
 from optimizer import LMMAES
+import json
 
 def eval(data, render=False):
     x = data[0]
@@ -52,7 +53,7 @@ def parallel_val(candidates, args):
     #     return p.map(eval, [[c, args] for c in candidates])
     res = []
     for c in candidates:
-        res.append(eval((c, args)))
+        res.append(eval((c, json.loads(json.dumps(args)))))
     return res
 
 

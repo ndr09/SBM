@@ -16,7 +16,7 @@ from torchvision import datasets, transforms
 import torch.nn.functional as F
 import torch
 from vision_task import eval_minst
-
+import json
 
 def generator(random, args):
     return np.asarray([random.uniform(args["pop_init_range"][0],
@@ -38,7 +38,7 @@ def parallel_val(candidates, args):
     #     return p.map(eval, [[c, args] for c in candidates])
     res = []
     for c in candidates:
-        res.append(eval_minst((c, args)))
+        res.append(eval_minst((c, json.loads(json.dumps(args)))))
     return res
 
 

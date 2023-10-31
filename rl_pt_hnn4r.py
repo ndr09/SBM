@@ -17,6 +17,7 @@ import torch.nn.functional as F
 import torch
 from vision_task import eval_minst
 from network_pt import NHNN
+import json
 
 def eval(data, render=False):
     x = data[0]
@@ -63,7 +64,7 @@ def parallel_val(candidates, args):
     #     return p.map(eval, [[c, args] for c in candidates])
     res = []
     for c in candidates:
-        res.append(eval((c, args)))
+        res.append(eval((c, json.loads(json.dumps(args)))))
     return res
 
 
