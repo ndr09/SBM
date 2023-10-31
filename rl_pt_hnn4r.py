@@ -25,7 +25,7 @@ def eval(data, render=False):
     args = data[1]
     cumulative_rewards = []
     task = gym.make("LunarLander-v2")
-    agent = NHNN([8, 20, 4], 0.001, device="cpu")
+    agent = NHNN([8, args["hnodes"], 4], 0.001, device="cpu")
     agent.set_hrules(x)
     for i in range(100):
         cumulative_rewards.append(0)
@@ -71,25 +71,21 @@ def parallel_val(candidates, args):
 def experiment_launcher(config):
     seed = config["seed"]
     hnodes = config["hnodes"]
-    rst = config["rst"]
-    ahl = config["ahl"]
     print(config)
     os.makedirs("./results_rl_HNN4R/", exist_ok=True)
     os.makedirs("./results_rl_HNN4R/" + "/" + str(hnodes), exist_ok=True)
     os.makedirs("./results_rl_HNN4R/" + "/" + str(hnodes) + "/" + str(seed), exist_ok=True)
 
-    fka = NHNN([8, 100, 4], 0.001)
+    fka = NHNN([8, hnodes, 4], 0.001)
     rng = np.random.default_rng()
     # fka.set_hrules(rng.random(fka.tns * 4))
     args = {}
-    args["num_vars"] = 3 * (8) + 4 * 100 + 3 * 4  # Number of dimensions of the search space
+    args["num_vars"] = fka.nparams  # Number of dimensions of the search space
     args["sigma"] = 1.0  # default standard deviation
     args["num_offspring"] = 20  # 4 + int(math.floor(3 * math.log(fka.nweights * 4)))  # lambda
     args["pop_size"] = int(math.floor(args["num_offspring"] / 2))  # mu
-    args["max_generations"] = (400 - args["pop_size"]) // args["num_offspring"] + 1
+    args["max_generations"] = (20000 - args["pop_size"]) // args["num_offspring"] + 1
     args["pop_init_range"] = [-1, 1]  # Range for the initial population
-    args["ahl"] = ahl
-    args["rst"] = rst
     args["hnodes"] = hnodes
     args["seed"] = seed
     random = Random(seed)
@@ -134,10 +130,11 @@ def chs(dir):
 
 
 if __name__ == "__main__":
-    c = 0
-    seed = 0
-
-    dir = "./results_rl_HNN4R/" + "/" + str(4) + "/" + str(seed) + "/"
-    if not chs(dir):
-        experiment_launcher({"seed": seed, "rst": 0, "ahl": 0, "hnodes": 300})
-        print("ended experiment " + str({"seed": seed, "rst": 0, "ahl": 0, "hnodes": 300}))
+    seed = int(sys.argv[1])
+    for ps in [[1], [10], [20]]:
+        for prate in [0, 80, 90]:
+            for hnodes in [5, 20, 90]:
+                dir = "./results_pr_rl_ll/" + str(ps[0]) + "/" + str(prate) + "/" + str(hnodes) + "/" + str(seed) + "/"
+                if not chs(dir):
+                    experiment_launcher({"seed": seed, "prate": prate, "ps": ps, "hnodes": hnodes})
+                    print("ended experiment " + str({"seed": seed, "prate": prate, "ps": ps, "hnodes": hnodes}))
