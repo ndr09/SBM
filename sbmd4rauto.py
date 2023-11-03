@@ -4,7 +4,7 @@ import os
 import sys
 from cma import CMAEvolutionStrategy as cmaes
 import gym
-from network import SBMD4Rauto
+from network5 import SBMD4Rauto
 import numpy as np
 import functools
 from random import Random
@@ -18,7 +18,7 @@ def eval(data, render=False):
     args = data[1]
     cumulative_rewards = []
     task = gym.make("LunarLander-v2")
-    agent = SBMD4Rauto([8, args["hnodes"], 4], 0, 0.005, args["seed"], False,args["ahl"], args["rhl"])
+    agent = SBMD4Rauto([8, args["hnodes"], 4], 0, 0.005, args["seed"], False,args["ahl"], args["rst"])
     agent.set_hrules(x)
     for i in range(100):
         cumulative_rewards.append(0)
@@ -53,7 +53,7 @@ def generator_wrapper(func):
 
 def parallel_val(candidates, args):
     # with parallel_backend('multiprocessing'):
-    with Pool(2) as p:
+    with Pool(20) as p:
         return p.map(eval, [[c, json.loads(json.dumps(args))] for c in candidates])
 
 

@@ -3,6 +3,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import time
+from scipy.stats import kstest
 
 
 # class Net(nn.Module):
@@ -46,7 +47,6 @@ class NN(nn.Module):
         self.set_weights([0. for _ in range(self.nweights)])
         self.double()
 
-
     def forward(self, inputs):
         with torch.no_grad():
             self.activations = []
@@ -55,8 +55,8 @@ class NN(nn.Module):
 
             for l in self.networks:
                 x = l(x)
-                self.activations.append(torch.clone(x))
                 x = torch.tanh(x)
+                self.activations.append(torch.clone(x))
 
             return x
 
@@ -79,7 +79,8 @@ class NN(nn.Module):
                 size = l.size()[0] * l.size()[1] + start
                 params = torch.tensor(weights[start:size])
                 start = size
-                self.networks[i].weight = nn.Parameter(torch.reshape(params, (l.size()[0], l.size()[1])).to(self.device))
+                self.networks[i].weight = nn.Parameter(
+                    torch.reshape(params, (l.size()[0], l.size()[1])).to(self.device))
                 i += 1
 
 
@@ -108,17 +109,18 @@ class HNN(NN):
         for i in range(len(weights)):
             l = weights[i]
             activations_i = self.activations[i].to(self.device)
-            activations_i1 = torch.reshape(self.activations[i + 1].to(self.device), (self.activations[i + 1].size()[0],1))
+            activations_i1 = torch.reshape(self.activations[i + 1].to(self.device),
+                                           (self.activations[i + 1].size()[0], 1))
             hrule_i = self.hrules[i].to(self.device)
             # la size dovra essere l1, l
-            pre = hrule_i[:,:,0]*activations_i
-            post = hrule_i[:,:,1]*activations_i1
-            C_i = activations_i*hrule_i[:,:,2]
-            C_j = activations_i1*hrule_i[:,:,2]
-            C = C_i*C_j
-            D = hrule_i[:,:,3]
-            dw = pre+post+C+D
-            weights[i] += self.eta*dw
+            pre = hrule_i[:, :, 0] * activations_i
+            post = hrule_i[:, :, 1] * activations_i1
+            C_i = activations_i * hrule_i[:, :, 2]
+            C_j = activations_i1 * hrule_i[:, :, 2]
+            C = C_i * C_j
+            D = hrule_i[:, :, 3]
+            dw = pre + post + C + D
+            weights[i] += self.eta * dw
 
         self.set_weights(weights)
 
@@ -160,7 +162,6 @@ class NHNN(NN):
         tmp1 = torch.tensor([[0.] for i in range(self.nodes[-1])])
         self.hrules.append(torch.hstack((tmp1, tmp)).to(self.device))
 
-
     def update_weights(self):
         weights = self.get_weights()
         num_layers = len(weights)
@@ -182,25 +183,92 @@ class NHNN(NN):
             post_j = torch.reshape(hrule_i1[:, 1] * activations_i1, (activations_i1.size()[0], 1))
             post_j = post_j.repeat((1, activations_i.size()[0]))
             c_i = torch.reshape(hrule_i[:, 2] * activations_i, (1, activations_i.size()[0]))
-            c_j = torch.reshape(hrule_i1[:, 2] * activations_i1, (activations_i1.size()[0],1))
-            d_i = torch.reshape(hrule_i[:, 3], (1,activations_i.size()[0]))
-            d_j = torch.reshape(hrule_i1[:, 3], ( activations_i1.size()[0],1))
+            c_j = torch.reshape(hrule_i1[:, 2] * activations_i1, (activations_i1.size()[0], 1))
+            d_i = torch.reshape(hrule_i[:, 3], (1, activations_i.size()[0]))
+            d_j = torch.reshape(hrule_i1[:, 3], (activations_i1.size()[0], 1))
 
             dw = pre_i + post_j + c_i * c_j + d_i * d_j
             dws.append(dw)
-            l += self.eta*dw
+            l += self.eta * dw
         self.set_weights(weights)
 
 
+class ANHNN(NHNN):
+    def __init__(self, nodes: list, eta: float, history_length: int, stability_window_size: int, hrules=None,
+                 grad=False, device="cpu"):
+        super(ANHNN, self).__init__(nodes, eta, hrules, grad=grad, device=device)
+        self.hl = history_length
+        self.hi = 0  # History index
+        self.sws = stability_window_size
+        self.nins = sum(self.nodes[1:])
+        self.ah = torch.zeros((self.hl, self.nins))
+        self.hrules_node = None
+        if self.hrules is not None:
+            self.hrules_node = self.get_hrules_for_nodes()
+        self.stable_nodes = set()
+
+    def _copy_act(self):
+        return self.activations[-1].clone()
+
+    def store_activation(self):
+        if self.hi < self.hl:
+            self.ah[self.hi] = self._copy_act()
+            self.hi += 1
+        else:
+            self.ah = torch.vstack((self.ah, self._copy_act()))[1:]
+            self.prune_stable_nodes()
+
+    def get_hrules_for_nodes(self):
+        return torch.concat(self.hrules[1:])
+
+    def check_stability(self):
+        stability = torch.zeros(self.nins, dtype=torch.int8)
+        x = self.act_history.transpose()[:, :self.ahl - self.rst]
+        y = self.act_history.transpose()[:, self.ahl - self.rst:]
+        for i in range(self.nins):
+            if i not in self.stable_nodes:
+                stability[i] = 1 if kstest(y[i], x[i], method="asymp")[1] > 0.05 else 0
+                if stability[i] == 1:
+                    self.stable_nodes.add(i)
+            else:
+                stability[i] = 1
+
+        return stability
+
+    def prune(self, hrules, stability):
+        return torch.where(stability == 0, hrules, torch.tensor([0., 0., 1., 1., ]))
+
+    def set_hrules_ft(self, new_rules):
+        start = 0
+        for i in range(1,len(self.hrules)):
+            end = self.hrules[i].size()[0]
+            self.hrules = new_rules[start:end].clone()
+            start += end
+
+    def prune_stable_nodes(self):
+        stability = self.check_stability()
+        if self.hrules_node is None:
+            self.hrules_node = self.get_hrules_for_nodes()
+        hrules = self.prune(self.hrules_node, stability)
+        self.set_hrules_ft(hrules)
+
+
 if __name__ == "__main__":
-    model = NHNN([4, 2, 1], 0.1, [float(i) for i in range(23)])
+    model = ANHNN([4, 2, 1], 0.1, 3,1,hrules=[float(i) for i in range(23)])
     # print(model.get_weights())
     # print([t.size() for t in model.hrules])
     # print([t.size() for t in model.get_weights()])
     # w = [torch.tensor([[1., 1., 1., 1.], [1., 1., 1., 1.]]), torch.tensor([[2., 2.]])]
     model.set_weights([float(i) for i in range(model.nweights)])
+    model.forward(torch.tensor([1.,1.,1.,1.]))
+    model.store_activation()
+    model.forward(torch.tensor([1.,1.,1.,1.]))
+    model.store_activation()
+
+    model.forward(torch.tensor([1.,1.,1.,1.]))
+    model.store_activation()
+
     #
     # print(model.get_weights())
-    model.forward(torch.tensor([1., 1., 1., 1.]))
-    model.update_weights1()
-    print(model.get_weights())
+    print(model.hrules)
+    print(model.hrules[1].size())

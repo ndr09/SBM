@@ -63,6 +63,7 @@ def parallel_val(candidates, args):
     # with Pool(20) as p:
     #     return p.map(eval, [[c, args] for c in candidates])
     res = []
+    print(args)
     for c in candidates:
         res.append(eval((c, json.loads(json.dumps(args)))))
     return res
@@ -80,7 +81,7 @@ def experiment_launcher(config):
     rng = np.random.default_rng()
     # fka.set_hrules(rng.random(fka.tns * 4))
     args = {}
-    args["num_vars"] = fka.nparams  # Number of dimensions of the search space
+    args["num_vars"] = fka.nparams.item()  # Number of dimensions of the search space
     args["sigma"] = 1.0  # default standard deviation
     args["num_offspring"] = 20  # 4 + int(math.floor(3 * math.log(fka.nweights * 4)))  # lambda
     args["pop_size"] = int(math.floor(args["num_offspring"] / 2))  # mu
