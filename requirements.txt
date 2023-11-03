@@ -5,3 +5,4 @@ networkx==2.8.8
 numpy==1.21.2
 snntorch==0.7.0
 torch==1.4.0
+math==3.12.0

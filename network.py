@@ -1,9 +1,6 @@
-import os
-
 import numpy as np
 import networkx as nx
 import matplotlib.pyplot as plt
-import pickle
 
 
 class NN():
@@ -22,7 +19,7 @@ class NN():
             self.activations[i] = [0. for _ in range(self.nodes[i])]
             for j in range(self.nodes[i]):
                 sum = self.weights[i - 1][j][0]
-                for k in range(1, self.nodes[i - 1] ):
+                for k in range(1, self.nodes[i - 1]):
                     sum += self.activations[i - 1][k - 1] * self.weights[i - 1][j][k]
                 self.activations[i][j] = np.tanh(sum)
         return np.array(self.activations[-1])
