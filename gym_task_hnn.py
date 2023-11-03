@@ -1,6 +1,6 @@
 from cma import CMAEvolutionStrategy as cmaes
-import gym
-from network import RNN, HNN, NN
+import gymnasium as gym
+from network import HNN, NN
 import numpy as np
 import functools
 from random import Random
@@ -9,14 +9,14 @@ import pickle
 
 def eval(x, render=False):
     cumulative_rewards = []
-    task = gym.make("LunarLander-v2")
-    agent = HNN([8, 5, 4], 0.001)
+    task = gym.make("LunarLander-v2", render_mode="human")
+    agent = HNN([8, 5, 4], 0.01)
     agent.set_hrules(x)
     for i in range(100):
         cumulative_rewards.append(0)
+
         done = False
-        task.seed(i)
-        obs = task.reset()
+        obs, info = task.reset(seed=i, options={})
         counter = 0
         while not done:
             output = agent.activate(obs)
@@ -24,10 +24,15 @@ def eval(x, render=False):
             # arr[output]+=1
             if render:
                 task.render()
-            obs, rew, done, _ = task.step(np.argmax(output))
+            obs, rew, terminated, truncated, info = task.step(np.argmax(output))
+            # obs, rew, done, _ = task.step(np.argmax(output))
             cumulative_rewards[-1] += rew
             agent.update_weights()
+            done = terminated or truncated
         counter += 1
+
+    task.close()
+       
     return -sum(cumulative_rewards) / 100
 
 
@@ -55,12 +60,11 @@ if __name__ == "__main__":
     fka.set_hrules(rng.random(fka.nweights*4))
     #eval(rng.random(fka.nweights*4), render=True)
 
-
-    args["num_vars"] = fka.nweights * 4  # Number of dimensions of the search space
+    args["num_vars"] = fka.nweights * 4  # Number of dimensions of the search space (*4 because of ABCD rule)
     args["max_generations"] = 50
     args["sigma"] = 1.0  # default standard deviation
-    args["pop_size"] = 4  # mu
-    args["num_offspring"] = 20  # lambda
+    args["pop_size"] = 3  # mu
+    args["num_offspring"] = 3  # lambda
     args["pop_init_range"] = [0, 1]  # Range for the initial population
 
     random = Random(0)
@@ -73,7 +77,7 @@ if __name__ == "__main__":
     while gen <= args["max_generations"]:
         candidates = es.ask()  # get list of new solutions
         fitnesses = parallel_val(candidates)
-        print("generation "+str(gen)+"  "+str(min(fitnesses))+"  "+str(np.mean(fitnesses)))
+        print("generation "+str(gen)+"  "+str(fitnesses)+"  "+str(np.mean(fitnesses)))
         es.tell(candidates, fitnesses)
         gen += 1
     final_pop = np.asarray(es.ask())

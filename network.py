@@ -5,37 +5,66 @@ import networkx as nx
 import matplotlib.pyplot as plt
 import pickle
 
+# the input layer mus have len = len of observations
 
 class NN():
     def __init__(self, nodes: list):
         self.nodes = nodes
         self.activations = [[0 for i in range(node)] for node in nodes]
         self.nweights = sum([self.nodes[i] * self.nodes[i + 1] for i in
-                             range(len(self.nodes) - 1)])  # nodes[0]*nodes[1]+nodes[1]*nodes[2]+nodes[2]*nodes[3]
+                             range(len(self.nodes) - 1)])  # nodes[0]*nodes[1] + nodes[1]*nodes[2] + nodes[2]*nodes[3]
 
+        # set an empty list for each layer of the NN, except the output
         self.weights = [[] for _ in range(len(self.nodes) - 1)]
-
+        
+    # use hyperbolic tangent as the activation function
+    # inputs is a list with len = nodes[0]
     def activate(self, inputs):
         self.activations[0] = [np.tanh(x) for x in inputs]
+
+        #for each layers
         for i in range(1, len(self.nodes)):
+            # set activations of that layer to zero
+            # the shape of self.activations is a list of list, each list activations[i] has len = nodes[i]
             self.activations[i] = [0. for _ in range(self.nodes[i])]
+            
+            # for each node in layer i
             for j in range(self.nodes[i]):
                 sum = 0  # self.weights[i - 1][j][0]
+
+                # for each node in layer i - 1
                 for k in range(self.nodes[i - 1]):
                     sum += self.activations[i - 1][k - 1] * self.weights[i - 1][j][k]
                 self.activations[i][j] = np.tanh(sum)
-        return np.array(self.activations[-1])
 
+        # self.activations = [8, 5 ,4]
+        # the method returns an array of len = self.nodes[-1]
+        return np.array(self.activations[-1])
+    
+    
+    def generator(random, args):
+        return np.asarray([random.uniform(args["pop_init_range"][0],
+                                      args["pop_init_range"][1])
+                       for _ in range(args["num_vars"])])
+
+    
     def set_weights(self, weights):
         # self.weights = [[] for _ in range(len(self.nodes) - 1)]
         c = 0
+        
+        # foreach layer, input excluded
         for i in range(1, len(self.nodes)):
+
+            # initialize the weights from layer i-1 to layer i to 0
             self.weights[i - 1] = [[0 for _ in range(self.nodes[i - 1])] for __ in range(self.nodes[i])]
+        
+            # for each node in layer i
             for j in range(self.nodes[i]):
+                 # for each node in layer i - 1
                 for k in range(self.nodes[i - 1]):
+                    # set the weight as the input one
                     self.weights[i - 1][j][k] = weights[c]
                     c += 1
-        # print(c)
 
     def get_list_weights(self):
         wghts = []
@@ -45,6 +74,7 @@ class NN():
                     wghts.append(np.abs(self.weights[i - 1][j][k]))
         return wghts
 
+    # TODO: it seems it creates a graph that represents the NN
     def nx_pos_because_it_was_too_hard_to_add_a_multipartite_from_a_list_as_it_works_for_the_bipartite(self, G):
         pos = {}
         nodes_G = list(G)
@@ -73,13 +103,18 @@ class NN():
         return self.nx_pos_because_it_was_too_hard_to_add_a_multipartite_from_a_list_as_it_works_for_the_bipartite(G)
 
     def nn_prune_weights(self, prune_ratio, fold=None):
+        # flatten the weighs
         wghts_abs = self.get_list_weights()
+
+        # compute the percentile to decide which weights to prune
         thr = np.percentile(wghts_abs, prune_ratio)
         for i in range(1, len(self.nodes)):
             for j in range(self.nodes[i]):
                 for k in range(self.nodes[i - 1]):
                     if np.abs(self.weights[i - 1][j][k]) <= thr:
                         self.weights[i - 1][j][k] = 0.
+
+        # print image of the network
         if fold is not None:
             mat = self.from_list_to_matrix()
             graph = nx.from_numpy_matrix(mat, create_using=nx.DiGraph)
@@ -89,6 +124,8 @@ class NN():
             # print("saving")
             plt.savefig(fold + "_init.png")
 
+    # create a networkx graph from the matrix [N x N], where N is the number of nodes
+    # the value in [i, j] corrensponds to the value of the weight between the nodes i and j
     def from_list_to_matrix(self):
         matrix = np.zeros((sum(self.nodes), sum(self.nodes)))
         # set inputs
@@ -111,22 +148,31 @@ class HNN(NN):
     def set_hrules(self, hrules):
         self.hrules = [[] for _ in range(len(self.nodes) - 1)]
         c = 0
+
+        # foreach layer, except input one
         for i in range(1, len(self.nodes)):
+            # initialize a rule for each weight
             self.hrules[i - 1] = [[0 for a in range(self.nodes[i - 1])] for b in range(self.nodes[i])]
+
+            # foreach node in layer i 
             for j in range(self.nodes[i]):
-                for k in range(self.nodes[i - 1]):
+                # foreach node in layer i - 1
+                for k in range(self.nodes[i - 1]):                    
                     self.hrules[i - 1][j][k] = [hrules[c + i] for i in range(4)]
                     c += 4
 
     def update_weights(self):
+        # foreach layer, except input one
         for l in range(1, len(self.nodes)):
+            # foreach node in layer l
             for o in range(self.nodes[l]):
-                # print(self.hrules[l - 1][o][0])
+                # TODO: what changes between this and the one in the loop below? Why here uses weights and below does not?
                 dw = self.eta * (self.hrules[l - 1][o][0][0] * self.weights[l - 1][o][0] * self.activations[l][o] +
                                  self.hrules[l - 1][o][0][1] * self.activations[l][o] +
                                  self.hrules[l - 1][o][0][2] * self.weights[l - 1][o][0] +
                                  self.hrules[l - 1][o][0][3])
                 self.weights[l - 1][o][0] += dw
+                # foreach node in layer l - 1
                 for i in range(1, self.nodes[l - 1]):
                     # print(self.hrules[l - 1][o][i])
                     dw = self.eta * (

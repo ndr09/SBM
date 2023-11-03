@@ -3,7 +3,7 @@ import math
 import os
 import sys
 from cma import CMAEvolutionStrategy as cmaes
-import gym
+import gymnasium
 from network import RNN
 import numpy as np
 import functools
