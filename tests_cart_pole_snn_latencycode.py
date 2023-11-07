@@ -315,7 +315,7 @@ def plot_average_fitnesses(files, output_file_name):
     plt.savefig(f'./' + output_file_name)
 
 
-def cart_pole_SNN_latencycode():
+def cart_pole_SNN_latencycode(baseFolder):
         
     for tests in range(5): # esegue 5 test ed effettua il grafico con medie e error bars
 
@@ -381,7 +381,7 @@ def cart_pole_SNN_latencycode():
                 best_guy = es.best.x
                 best = SNN([8, 4, 4, 2], 20)
                 best.set_params(best_guy)
-                with open("thresholds-biases.txt", "a") as file:
+                with open(baseFolder+"/thresholds-biases.txt", "a") as file:
                     file.write("GEN " + str(gen+1) + "\n")
                     file.write("thresholds:\n")
                     d = 0
@@ -436,7 +436,11 @@ def cart_pole_SNN_latencycode():
 
         save_scores(average_scores_history, best_scores_history, tests, "cart_pole_SNN_latencycode_")
 
-        with open("./nn_cartpole_SNN_latencycode"+str(best_fitness)+".pkl", "wb") as f:
+        with open("./"+baseFolder+"/nn_cartpole_SNN_latencycode"+str(best_fitness)+".pkl", "wb") as f:
             pickle.dump(best_guy, f)
 
-    plot_average_fitnesses(['cart_pole_SNN_latencycode_scores_run_0.txt', 'cart_pole_SNN_latencycode_scores_run_1.txt', 'cart_pole_SNN_latencycode_scores_run_2.txt', 'cart_pole_SNN_latencycode_scores_run_3.txt', 'cart_pole_SNN_latencycode_scores_run_4.txt'], "CartPole_SNN_latencycode.png")
+    plot_average_fitnesses([baseFolder+'/cart_pole_SNN_latencycode_scores_run_0.txt',
+                            baseFolder+'/cart_pole_SNN_latencycode_scores_run_1.txt',
+                            baseFolder+'/cart_pole_SNN_latencycode_scores_run_2.txt',
+                            baseFolder+'/cart_pole_SNN_latencycode_scores_run_3.txt',
+                            baseFolder+'/cart_pole_SNN_latencycode_scores_run_4.txt'], baseFolder+"/CartPole_SNN_latencycode.png")

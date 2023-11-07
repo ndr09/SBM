@@ -197,7 +197,7 @@ def plot_average_fitnesses(files, output_file_name):
     plt.savefig(f'./' + output_file_name)
 
 
-def lunar_lander_NN():
+def lunar_lander_NN(baseFolder):
     for tests in range(5): # esegue 5 test ed effettua il grafico con medie e error bars
 
         print("TEST " + str(tests) + " LUNAR LANDER NN")
@@ -264,9 +264,13 @@ def lunar_lander_NN():
         best_guy = es.best.x
         best_fitness = es.best.f
 
-        save_scores(average_scores_history, best_scores_history, tests, "cart_pole_NN_")
+        save_scores(average_scores_history, best_scores_history, tests, baseFolder+"/cart_pole_NN_")
 
-        with open("./nn_lunarlander_"+str(best_fitness)+".pkl", "wb") as f:
+        with open("./"+baseFolder+"/nn_lunarlander_"+str(best_fitness)+".pkl", "wb") as f:
             pickle.dump(best_guy, f)
 
-        plot_average_fitnesses(['lunar_lander_NN_scores_run_0.txt', 'lunar_lander_NN_scores_run_1.txt', 'lunar_lander_NN_scores_run_2.txt', 'lunar_lander_NN_scores_run_3.txt', 'lunar_lander_NN_scores_run_4.txt'], "lunar_lander_NN.png")
+        plot_average_fitnesses([baseFolder+'/lunar_lander_NN_scores_run_0.txt',
+                                baseFolder+'/lunar_lander_NN_scores_run_1.txt',
+                                baseFolder+'/lunar_lander_NN_scores_run_2.txt',
+                                baseFolder+'/lunar_lander_NN_scores_run_3.txt',
+                                baseFolder+'/lunar_lander_NN_scores_run_4.txt'], baseFolder+"/lunar_lander_NN.png")

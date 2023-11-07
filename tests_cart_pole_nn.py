@@ -197,7 +197,7 @@ def plot_average_fitnesses(files, output_file_name):
     plt.savefig(f'./' + output_file_name)
 
 
-def cart_pole_NN():
+def cart_pole_NN(baseFolder):
     
     for tests in range(5): # esegue 5 test ed effettua il grafico con medie e error bars
 
@@ -265,9 +265,11 @@ def cart_pole_NN():
         best_guy = es.best.x
         best_fitness = es.best.f
 
-        save_scores(average_scores_history, best_scores_history, tests, "cart_pole_NN_")
+        save_scores(average_scores_history, best_scores_history, tests, baseFolder+"/cart_pole_NN_")
 
-        with open("./nn_test_cartpole_"+str(best_fitness)+".pkl", "wb") as f:
+        with open("./"+baseFolder+"/nn_test_cartpole_"+str(best_fitness)+".pkl", "wb") as f:
             pickle.dump(best_guy, f)
     
-    plot_average_fitnesses(['cart_pole_NN_scores_run_0.txt', 'cart_pole_NN_scores_run_1.txt', 'cart_pole_NN_scores_run_2.txt', 'cart_pole_NN_scores_run_3.txt', 'cart_pole_NN_scores_run_4.txt'], "CartPole_NN.png")
+    plot_average_fitnesses([baseFolder+'/cart_pole_NN_scores_run_0.txt', baseFolder+'/cart_pole_NN_scores_run_1.txt',
+                            baseFolder+'/cart_pole_NN_scores_run_2.txt', baseFolder+'/cart_pole_NN_scores_run_3.txt',
+                            baseFolder+'/cart_pole_NN_scores_run_4.txt'], baseFolder+"/CartPole_NN.png")
