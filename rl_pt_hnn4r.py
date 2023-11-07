@@ -19,6 +19,7 @@ from vision_task import eval_minst
 from network_pt import NHNN
 import json
 
+
 def eval(data, render=False):
     x = data[0]
     # print(x.tolist())
@@ -43,6 +44,7 @@ def eval(data, render=False):
             agent.update_weights()
 
     return -np.mean(cumulative_rewards)
+
 
 def generator(random, args):
     return np.asarray([random.uniform(args["pop_init_range"][0],
@@ -73,9 +75,14 @@ def experiment_launcher(config):
     seed = config["seed"]
     hnodes = config["hnodes"]
     print(config)
-    os.makedirs("./results_rl_HNN4R/", exist_ok=True)
-    os.makedirs("./results_rl_HNN4R/" + "/" + str(hnodes), exist_ok=True)
-    os.makedirs("./results_rl_HNN4R/" + "/" + str(hnodes) + "/" + str(seed), exist_ok=True)
+    os.makedirs("./results_pr_rl_ll/", exist_ok=True)
+    os.makedirs("./results_pr_rl_ll/" + str(ps[0]), exist_ok=True)
+
+    os.makedirs("./results_pr_rl_ll/" + str(ps[0]) + "/" + str(prate), exist_ok=True)
+
+    os.makedirs("./results_pr_rl_ll/" + str(ps[0]) + "/" + str(prate) + "/" + str(hnodes), exist_ok=True)
+    os.makedirs("./results_pr_rl_ll/" + str(ps[0]) + "/" + str(prate) + "/" + str(hnodes) + "/" + str(seed),
+                exist_ok=True)
 
     fka = NHNN([8, hnodes, 4], 0.001)
     rng = np.random.default_rng()
@@ -103,7 +110,8 @@ def experiment_launcher(config):
         candidates = es.ask()  # get list of new solutions
         fitnesses = parallel_val(candidates, args)
         log = "generation " + str(gen) + "  " + str(min(fitnesses)) + "  " + str(np.mean(fitnesses))
-        with open("./results_rl_HNN4R/" + "/" + str(hnodes) + "/" + str(seed) + "/best_" + str(
+        with open("./results_pr_rl_ll/" + str(ps[0]) + "/" + str(prate) + "/" + str(hnodes) + "/" + str(
+                seed) + "/best_" + str(
                 gen) + ".pkl", "wb") as f:
             pickle.dump(candidates[np.argmin(fitnesses)], f)
         logs.append(log)
@@ -117,10 +125,10 @@ def experiment_launcher(config):
     best_guy = es.best.x
     best_fitness = es.best.f
 
-    with open("./results_rl_HNN4R/" + "/" + str(hnodes) + "/" + str(seed) + "/" + str(
+    with open("./results_pr_rl_ll/" + str(ps[0]) + "/" + str(prate) + "/" + str(hnodes) + "/" + str(seed) + "/" + str(
             best_fitness) + ".pkl", "wb") as f:
         pickle.dump(best_guy, f)
-    with open("./results_rl_HNN4R/" + "/" + str(hnodes) + "/" + str(seed) + "/log.txt",
+    with open("./results_pr_rl_ll/" + str(ps[0]) + "/" + str(prate) + "/" + str(hnodes) + "/" + str(seed) + "/log.txt",
               "w") as f:
         for l in logs:
             f.write(l + "\n")
@@ -131,10 +139,10 @@ def chs(dir):
 
 
 if __name__ == "__main__":
-    seed = int(sys.argv[1])
-    for ps in [[1], [10], [20]]:
-        for prate in [0, 80, 90]:
-            for hnodes in [5, 20, 90]:
+    seed = 0  # int(sys.argv[1])
+    for ps in [[1]]:
+        for prate in [0]:
+            for hnodes in [5]:
                 dir = "./results_pr_rl_ll/" + str(ps[0]) + "/" + str(prate) + "/" + str(hnodes) + "/" + str(seed) + "/"
                 if not chs(dir):
                     experiment_launcher({"seed": seed, "prate": prate, "ps": ps, "hnodes": hnodes})
