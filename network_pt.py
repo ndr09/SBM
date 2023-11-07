@@ -197,18 +197,18 @@ class ANHNN(NHNN):
     def __init__(self, nodes: list, eta: float, history_length: int, stability_window_size: int, hrules=None,
                  grad=False, device="cpu"):
         super(ANHNN, self).__init__(nodes, eta, hrules, grad=grad, device=device)
-        self.hl = history_length
-        self.hi = 0  # History index
-        self.sws = stability_window_size
-        self.nins = sum(self.nodes[1:])
-        self.ah = torch.zeros((self.hl, self.nins))
+        self.hl = torch.tensor(history_length).to(self.device)
+        self.hi = torch.tensor(0).to(self.device)  # History index
+        self.sws = torch.tensor(stability_window_size).to(self.device)
+        self.nins = torch.tensor(sum(self.nodes[1:])).to(self.device)
+        self.ah = torch.zeros((self.hl, self.nins)).to(self.device)
         self.hrules_node = None
-        if self.hrules is not None:
+        if not len(self.hrules) == 0:
             self.hrules_node = self.get_hrules_for_nodes()
         self.stable_nodes = set()
 
     def _copy_act(self):
-        return self.activations[-1].clone()
+        return torch.concat(self.activations[1:])
 
     def store_activation(self):
         if self.hi < self.hl:
@@ -223,10 +223,12 @@ class ANHNN(NHNN):
 
     def check_stability(self):
         stability = torch.zeros(self.nins, dtype=torch.int8)
-        x = self.act_history.transpose()[:, :self.ahl - self.rst]
-        y = self.act_history.transpose()[:, self.ahl - self.rst:]
+        # print(torch.transpose(self.ah, 0, 1).size())
+        x = torch.t(self.ah)[:, :self.hl - self.sws]
+        y = torch.t(self.ah)[:, self.hl - self.sws:]
         for i in range(self.nins):
             if i not in self.stable_nodes:
+                print(kstest(y[i], x[i], method="asymp")[1])
                 stability[i] = 1 if kstest(y[i], x[i], method="asymp")[1] > 0.05 else 0
                 if stability[i] == 1:
                     self.stable_nodes.add(i)
@@ -236,7 +238,8 @@ class ANHNN(NHNN):
         return stability
 
     def prune(self, hrules, stability):
-        return torch.where(stability == 0, hrules, torch.tensor([0., 0., 1., 1., ]))
+        print(hrules.size(), stability,)
+        return torch.where(stability == 0, hrules, torch.tensor([[0., 0., 1., 1., ]]))
 
     def set_hrules_ft(self, new_rules):
         start = 0
@@ -255,10 +258,6 @@ class ANHNN(NHNN):
 
 if __name__ == "__main__":
     model = ANHNN([4, 2, 1], 0.1, 3,1,hrules=[float(i) for i in range(23)])
-    # print(model.get_weights())
-    # print([t.size() for t in model.hrules])
-    # print([t.size() for t in model.get_weights()])
-    # w = [torch.tensor([[1., 1., 1., 1.], [1., 1., 1., 1.]]), torch.tensor([[2., 2.]])]
     model.set_weights([float(i) for i in range(model.nweights)])
     model.forward(torch.tensor([1.,1.,1.,1.]))
     model.store_activation()

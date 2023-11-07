@@ -35,8 +35,8 @@ def eval(data, render=False):
         obs = task.reset()
         # counter = 0
         while not done:
-            output = agent.forward(torch.tensor(obs, dtype=torch.float))
-
+            output = agent.forward(torch.tensor(obs, dtype=torch.float)).cpu()
+            agent.store_activation()
             if render:
                 task.render()
             obs, rew, done, _ = task.step(np.argmax(output).item())
@@ -92,12 +92,12 @@ def experiment_launcher(config):
     args["sigma"] = 1.0  # default standard deviation
     args["num_offspring"] = 20  # 4 + int(math.floor(3 * math.log(fka.nweights * 4)))  # lambda
     args["pop_size"] = int(math.floor(args["num_offspring"] / 2))  # mu
-    args["max_generations"] = (20000 - args["pop_size"]) // args["num_offspring"] + 1
+    args["max_generations"] = (100 - args["pop_size"]) // args["num_offspring"] + 1
     args["pop_init_range"] = [-1, 1]  # Range for the initial population
     args["hnodes"] = hnodes
     args["seed"] = seed
     random = Random(seed)
-    es = LMMAES(args["num_vars"], lambda_=20, mu=10, sigma=1)
+    es = LMMAES(args["num_vars"], lambda_=5, mu=4, sigma=1)
 
     # es = cmaes(generator(random, args),
     #            args["sigma"],
