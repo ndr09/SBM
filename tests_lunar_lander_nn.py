@@ -264,7 +264,7 @@ def lunar_lander_NN(baseFolder):
         best_guy = es.best.x
         best_fitness = es.best.f
 
-        save_scores(average_scores_history, best_scores_history, tests, baseFolder+"/cart_pole_NN_")
+        save_scores(average_scores_history, best_scores_history, tests, baseFolder+"/lunar_lander_NN_")
 
         with open("./"+baseFolder+"/nn_lunarlander_"+str(best_fitness)+".pkl", "wb") as f:
             pickle.dump(best_guy, f)
