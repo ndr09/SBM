@@ -102,6 +102,98 @@ class NN():
                     matrix[ix][ox] = self.weights[i - 1][j][k]
         return matrix
 
+class NNN():
+    def __init__(self, nodes: list):
+        self.nodes = nodes
+        self.activations = [[0 for i in range(node)] for node in nodes]
+        self.nweights = sum(nodes)  # nodes[0]*nodes[1]+nodes[1]*nodes[2]+nodes[2]*nodes[3]
+
+        self.weights = [[0 for _ in range(self.nodes[i])] for i in range(len(self.nodes))]
+
+    def activate(self, inputs):
+        self.activations[0] = [np.tanh(x) for x in inputs]
+        for i in range(1, len(self.nodes)):
+            self.activations[i] = [0. for _ in range(self.nodes[i])]
+            for j in range(self.nodes[i]):
+                sum = 0  # self.weights[i - 1][j][0]
+                for k in range(self.nodes[i - 1]):
+                    sum += self.activations[i - 1][k - 1] * self.weights[i - 1][k]*self.weights[i][j]
+                self.activations[i][j] = np.tanh(sum)
+        return np.array(self.activations[-1])
+
+    def set_weights(self, weights):
+        # self.weights = [[] for _ in range(len(self.nodes) - 1)]
+        c = 0
+        for i in range(0, len(self.nodes)):
+            for j in range(self.nodes[i]):
+                self.weights[i][j] = weights[c]
+                c += 1
+        # print(c)
+
+    def get_list_weights(self):
+        wghts = []
+        for i in range(1, len(self.nodes)):
+            for j in range(self.nodes[i]):
+                for k in range(self.nodes[i - 1]):
+                    wghts.append(np.abs(self.weights[i - 1][j][k]))
+        return wghts
+
+    def nx_pos_because_it_was_too_hard_to_add_a_multipartite_from_a_list_as_it_works_for_the_bipartite(self, G):
+        pos = {}
+        nodes_G = list(G)
+        input_space = 1.75 / self.nodes[0]
+        output_space = 1.75 / self.nodes[-1]
+
+        for i in range(self.nodes[0]):
+            pos[i] = np.array([-1., i * input_space])
+
+        c = 0
+        for i in range(self.nodes[0] + self.nodes[1], sum(self.nodes)):
+            pos[i] = np.array([1, c * output_space])
+            c += 1
+
+        center_node = []
+        for n in nodes_G:
+            if not n in pos:
+                center_node.append(n)
+
+        center_space = 1.75 / len(center_node)
+        for i in range(len(center_node)):
+            pos[center_node[i]] = np.array([0, i * center_space])
+        return pos
+
+    def nxpbiwthtaamfalaiwftb(self, G):
+        return self.nx_pos_because_it_was_too_hard_to_add_a_multipartite_from_a_list_as_it_works_for_the_bipartite(G)
+
+    def nn_prune_weights(self, prune_ratio, fold=None):
+        wghts_abs = self.get_list_weights()
+        thr = np.percentile(wghts_abs, prune_ratio)
+        for i in range(1, len(self.nodes)):
+            for j in range(self.nodes[i]):
+                for k in range(self.nodes[i - 1]):
+                    if np.abs(self.weights[i - 1][j][k]) <= thr:
+                        self.weights[i - 1][j][k] = 0.
+        if fold is not None:
+            mat = self.from_list_to_matrix()
+            graph = nx.from_numpy_matrix(mat, create_using=nx.DiGraph)
+            plt.clf()
+            pos = self.nxpbiwthtaamfalaiwftb(graph)
+            nx.draw(graph, pos=pos, with_labels=True, font_weight='bold')
+            # print("saving")
+            plt.savefig(fold + "_init.png")
+
+    def from_list_to_matrix(self):
+        matrix = np.zeros((sum(self.nodes), sum(self.nodes)))
+        # set inputs
+        for i in range(1, len(self.nodes)):
+            for j in range(self.nodes[i]):
+                for k in range(self.nodes[i - 1]):
+                    ix = k + sum(self.nodes[:i - 1])
+                    ox = j + (sum(self.nodes[:i]))
+                    matrix[ix][ox] = self.weights[i - 1][j][k]
+        return matrix
+
+
 
 class HNN(NN):
     def __init__(self, nodes, eta=0.1):
@@ -2386,6 +2478,9 @@ class SBNN2R(HNN):
 
 
 if __name__ == "__main__":
-    a = [1, 2, 3]
-    b = [2]
-    c = [1]
+   a = NNN([1,2,3])
+   print(a.weights)
+
+   a.set_weights([5 for i in range(6)])
+   print(a.weights)
+   print(a.activate([1.]))
