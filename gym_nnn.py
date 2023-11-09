@@ -25,8 +25,8 @@ def eval(data, render=False):
     # print(x.tolist())
     args = data[1]
     cumulative_rewards = []
-    task = gym.make("LunarLander-v2")
-    agent = NNN([8, args["hnodes"], 4])
+    task = gym.make("CartPole-v1")
+    agent = NNN([4, args["hnodes"], 2])
     agent.set_weights(x)
     for i in range(100):
         cumulative_rewards.append(0)
@@ -36,7 +36,6 @@ def eval(data, render=False):
         # counter = 0
         while not done:
             output = agent.activate(obs)
-
             if render:
                 task.render()
             obs, rew, done, _ = task.step(np.argmax(output))
@@ -69,7 +68,7 @@ def experiment_launcher(config):
     hnodes = config["hnodes"]
     print(config)
 
-    fka = NNN([8, hnodes, 4])
+    fka = NNN([4, hnodes, 2])
     rng = np.random.default_rng()
     args = {}
     args["num_vars"] = fka.nweights  # Number of dimensions of the search space
@@ -82,7 +81,12 @@ def experiment_launcher(config):
     args["seed"] = seed
     args["dir"] = config["dir"]
     random = Random(seed)
-    es = LMMAES(args["num_vars"], lambda_=20, mu=10, sigma=1)
+    es = cmaes(generator(random, args),
+               args["sigma"],
+               {'popsize': args["num_offspring"],
+                'seed': seed}
+               )
+    #LMMAES(args["num_vars"], lambda_=4, mu=2, sigma=1, m=args["num_vars"])
 
     gen = 0
     logs = []
@@ -100,7 +104,7 @@ def experiment_launcher(config):
 
         logs.append(log)
 
-        es.tell(fitnesses)
+        es.tell(candidates, fitnesses)
         gen += 1
 
     best_guy = es.best.x
