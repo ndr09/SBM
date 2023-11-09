@@ -21,7 +21,7 @@ def eval_minst(data):
         data = data.to(agent.device)
         target = target.to(agent.device)
 
-        for i  in range(len(data)):
+        for i in range(len(data)):
             out = F.log_softmax(agent.forward(data[i].flatten()), dim=0)
             w.append([ torch.max(l).item() for l in agent.get_weights()])
             outputs = out if outputs is None else torch.vstack((outputs, out))

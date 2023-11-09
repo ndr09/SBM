@@ -63,13 +63,6 @@ def generator_wrapper(func):
 def parallel_val(candidates, args):
     with Pool(20) as p:
         return p.map(eval, [[c, json.loads(json.dumps(args))] for c in candidates])
-    # res = []
-    # # print(args)
-    #
-    # for c in candidates:
-    #     res.append(eval((c, json.loads(json.dumps(args)))))
-    #     print("ended ", len(res))
-    # return res
 
 
 def experiment_launcher(config):
@@ -79,7 +72,6 @@ def experiment_launcher(config):
 
     fka = NHNN([8, hnodes, 4], 0.001)
     rng = np.random.default_rng()
-    # fka.set_hrules(rng.random(fka.tns * 4))
     args = {}
     args["num_vars"] = fka.nparams.item()  # Number of dimensions of the search space
     args["sigma"] = 1.0  # default standard deviation
@@ -93,11 +85,6 @@ def experiment_launcher(config):
     random = Random(seed)
     es = LMMAES(args["num_vars"], lambda_=20, mu=10, sigma=1)
 
-    # es = cmaes(generator(random, args),
-    #            args["sigma"],
-    #            {'popsize': args["num_offspring"],
-    #             'seed': seed,
-    #             'CMA_mu': args["pop_size"]})
     gen = 0
     logs = []
     while gen <= args["max_generations"]:
@@ -105,6 +92,7 @@ def experiment_launcher(config):
 
         fitnesses = parallel_val(candidates, args)
         log = "generation " + str(gen) + "  " + str(min(fitnesses)) + "  " + str(np.mean(fitnesses))
+
         with open(args["dir"] + "/best_" + str(gen) + ".pkl", "wb") as f:
             pickle.dump(candidates[np.argmin(fitnesses)], f)
 
@@ -121,6 +109,7 @@ def experiment_launcher(config):
 
     with open(args["dir"] + "/" + str(best_fitness) + ".pkl", "wb") as f:
         pickle.dump(best_guy, f)
+
     with open(args["dir"] + "/log.txt", "w") as f:
         for l in logs:
             f.write(l + "\n")
