@@ -269,7 +269,7 @@ def lunar_lander_NN(baseFolder):
         with open("./"+baseFolder+"/nn_lunarlander_"+str(best_fitness)+".pkl", "wb") as f:
             pickle.dump(best_guy, f)
 
-        plot_average_fitnesses([baseFolder+'/lunar_lander_NN_scores_run_0.txt',
+    plot_average_fitnesses([baseFolder+'/lunar_lander_NN_scores_run_0.txt',
                                 baseFolder+'/lunar_lander_NN_scores_run_1.txt',
                                 baseFolder+'/lunar_lander_NN_scores_run_2.txt',
                                 baseFolder+'/lunar_lander_NN_scores_run_3.txt',
