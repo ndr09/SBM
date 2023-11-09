@@ -19,6 +19,7 @@ from vision_task import eval_minst
 from network_pt import NHNN
 import json
 
+
 def eval(data, render=False):
     x = data[0]
     # print(x.tolist())
@@ -44,6 +45,7 @@ def eval(data, render=False):
 
     return -np.mean(cumulative_rewards)
 
+
 def generator(random, args):
     return np.asarray([random.uniform(args["pop_init_range"][0],
                                       args["pop_init_range"][1])
@@ -63,9 +65,11 @@ def parallel_val(candidates, args):
     # with Pool(20) as p:
     #     return p.map(eval, [[c, args] for c in candidates])
     res = []
-    print(args)
+    # print(args)
+
     for c in candidates:
         res.append(eval((c, json.loads(json.dumps(args)))))
+        print("ended ", len(res))
     return res
 
 
@@ -73,9 +77,6 @@ def experiment_launcher(config):
     seed = config["seed"]
     hnodes = config["hnodes"]
     print(config)
-    os.makedirs("./results_rl_HNN4R/", exist_ok=True)
-    os.makedirs("./results_rl_HNN4R/" + "/" + str(hnodes), exist_ok=True)
-    os.makedirs("./results_rl_HNN4R/" + "/" + str(hnodes) + "/" + str(seed), exist_ok=True)
 
     fka = NHNN([8, hnodes, 4], 0.001)
     rng = np.random.default_rng()
@@ -89,6 +90,7 @@ def experiment_launcher(config):
     args["pop_init_range"] = [-1, 1]  # Range for the initial population
     args["hnodes"] = hnodes
     args["seed"] = seed
+    args["dir"] = config["dir"]
     random = Random(seed)
     es = LMMAES(args["num_vars"], lambda_=20, mu=10, sigma=1)
 
@@ -101,27 +103,26 @@ def experiment_launcher(config):
     logs = []
     while gen <= args["max_generations"]:
         candidates = es.ask()  # get list of new solutions
+
         fitnesses = parallel_val(candidates, args)
         log = "generation " + str(gen) + "  " + str(min(fitnesses)) + "  " + str(np.mean(fitnesses))
-        with open("./results_rl_HNN4R/" + "/" + str(hnodes) + "/" + str(seed) + "/best_" + str(
-                gen) + ".pkl", "wb") as f:
+        with open(args["dir"] + "/best_" + str(gen) + ".pkl", "wb") as f:
             pickle.dump(candidates[np.argmin(fitnesses)], f)
+
+        with open(args["dir"] + "/tlog.txt", "a") as f:
+            f.write(log + "\n")
+
         logs.append(log)
 
-        print(log)
         es.tell(fitnesses)
         gen += 1
-    final_pop = np.asarray(es.ask())
-    final_pop_fitnesses = np.asarray(parallel_val(final_pop, args))
 
     best_guy = es.best.x
     best_fitness = es.best.f
 
-    with open("./results_rl_HNN4R/" + "/" + str(hnodes) + "/" + str(seed) + "/" + str(
-            best_fitness) + ".pkl", "wb") as f:
+    with open(args["dir"] + "/" + str(best_fitness) + ".pkl", "wb") as f:
         pickle.dump(best_guy, f)
-    with open("./results_rl_HNN4R/" + "/" + str(hnodes) + "/" + str(seed) + "/log.txt",
-              "w") as f:
+    with open(args["dir"] + "/log.txt", "w") as f:
         for l in logs:
             f.write(l + "\n")
 
@@ -135,7 +136,14 @@ if __name__ == "__main__":
     for ps in [[1], [10], [20]]:
         for prate in [0, 80, 90]:
             for hnodes in [5, 20, 90]:
-                dir = "./results_pr_rl_ll/" + str(ps[0]) + "/" + str(prate) + "/" + str(hnodes) + "/" + str(seed) + "/"
+
+                os.makedirs("./results_pt_NHNN/", exist_ok=True)
+                os.makedirs("./results_pt_NHNN/" + str(ps[0]), exist_ok=True)
+                os.makedirs("./results_pt_NHNN/" + str(ps[0]) + "/" + str(prate), exist_ok=True)
+                os.makedirs("./results_pt_NHNN/" + str(ps[0]) + "/" + str(prate) + "/" + str(hnodes), exist_ok=True)
+                os.makedirs("./results_pt_NHNN/" + str(ps[0]) + "/" + str(prate) + "/" + str(hnodes) + "/" + str(seed),
+                            exist_ok=True)
+                dir = "./results_pt_NHNN/" + str(ps[0]) + "/" + str(prate) + "/" + str(hnodes) + "/" + str(seed) + "/"
                 if not chs(dir):
-                    experiment_launcher({"seed": seed, "prate": prate, "ps": ps, "hnodes": hnodes})
+                    experiment_launcher({"seed": seed, "prate": prate, "ps": ps, "hnodes": hnodes, "dir": dir})
                     print("ended experiment " + str({"seed": seed, "prate": prate, "ps": ps, "hnodes": hnodes}))
