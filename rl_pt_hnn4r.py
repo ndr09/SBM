@@ -61,16 +61,15 @@ def generator_wrapper(func):
 
 
 def parallel_val(candidates, args):
-    # with parallel_backend('multiprocessing'):
-    # with Pool(20) as p:
-    #     return p.map(eval, [[c, args] for c in candidates])
-    res = []
-    # print(args)
-
-    for c in candidates:
-        res.append(eval((c, json.loads(json.dumps(args)))))
-        print("ended ", len(res))
-    return res
+    with Pool(20) as p:
+        return p.map(eval, [[c, json.loads(json.dumps(args))] for c in candidates])
+    # res = []
+    # # print(args)
+    #
+    # for c in candidates:
+    #     res.append(eval((c, json.loads(json.dumps(args)))))
+    #     print("ended ", len(res))
+    # return res
 
 
 def experiment_launcher(config):
