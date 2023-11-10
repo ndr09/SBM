@@ -182,12 +182,15 @@ class NHNN(NN):
             pre_i = pre_i.repeat((activations_i1.size()[0], 1))
             post_j = torch.reshape(hrule_i1[:, 1] * activations_i1, (activations_i1.size()[0], 1))
             post_j = post_j.repeat((1, activations_i.size()[0]))
-            c_i = torch.reshape(hrule_i[:, 2] * activations_i, (1, activations_i.size()[0]))
-            c_j = torch.reshape(hrule_i1[:, 2] * activations_i1, (activations_i1.size()[0], 1))
+
+            c_i = torch.reshape(torch.where(hrule_i[:, 2] == 1., 1., hrule_i[:, 2] * activations_i),
+                                (1, activations_i.size()[0]))
+            c_j = torch.reshape(torch.where(hrule_i1[:, 2] == 1., 1., hrule_i1[:, 2] * activations_i1),
+                                (activations_i1.size()[0], 1))
             d_i = torch.reshape(hrule_i[:, 3], (1, activations_i.size()[0]))
             d_j = torch.reshape(hrule_i1[:, 3], (activations_i1.size()[0], 1))
 
-            dw = pre_i + post_j + c_i * c_j + d_i * d_j
+            dw = pre_i + post_j + torch.where((c_i == 1.) & (c_j == 1.), 0, c_i * c_j) + torch.where((d_i == 1.) & (d_j == 1.), 0, d_i * d_j)
             dws.append(dw)
             l += self.eta * dw
         self.set_weights(weights)
@@ -200,7 +203,7 @@ class ANHNN(NHNN):
         self.hl = torch.tensor(history_length).to(self.device)
         self.hi = torch.tensor(0).to(self.device)  # History index
         self.sws = torch.tensor(stability_window_size).to(self.device)
-        self.nins = torch.tensor(sum(self.nodes[1:])).to(self.device)
+        self.nins = torch.tensor(sum(nodes[1:])).to(self.device)
         self.ah = torch.zeros((self.hl, self.nins)).to(self.device)
         self.hrules_node = None
         if not len(self.hrules) == 0:
@@ -228,7 +231,6 @@ class ANHNN(NHNN):
         y = torch.t(self.ah)[:, self.hl - self.sws:]
         for i in range(self.nins):
             if i not in self.stable_nodes:
-                print(kstest(y[i], x[i], method="asymp")[1])
                 stability[i] = 1 if kstest(y[i], x[i], method="asymp")[1] > 0.05 else 0
                 if stability[i] == 1:
                     self.stable_nodes.add(i)
@@ -238,15 +240,21 @@ class ANHNN(NHNN):
         return stability
 
     def prune(self, hrules, stability):
-        print(hrules.size(), stability,)
-        return torch.where(stability == 0, hrules, torch.tensor([[0., 0., 1., 1., ]]))
+        stability = torch.reshape(stability, (stability.size()[0], 1))
+        pruned = torch.where(stability == 0, hrules, torch.tensor([[0., 0., 1., 1., ]]))
+        # print("pruning", hrules.size(), pruned.size())
+        return pruned
 
     def set_hrules_ft(self, new_rules):
         start = 0
-        for i in range(1,len(self.hrules)):
-            end = self.hrules[i].size()[0]
-            self.hrules = new_rules[start:end].clone()
+        tmp = []
+        tmp.append(self.hrules[0].clone())
+        for i in range(1, len(self.hrules)):
+            end = start + self.hrules[i].size()[0]
+            # print(i,start, end, new_rules[start:end].clone(), new_rules.size())
+            tmp.append(new_rules[start:end].clone())
             start += end
+        self.hrules = tmp
 
     def prune_stable_nodes(self):
         stability = self.check_stability()
@@ -257,14 +265,14 @@ class ANHNN(NHNN):
 
 
 if __name__ == "__main__":
-    model = ANHNN([4, 2, 1], 0.1, 3,1,hrules=[float(i) for i in range(23)])
+    model = ANHNN([4, 2, 1], 0.1, 3, 1, hrules=[float(i) for i in range(23)])
     model.set_weights([float(i) for i in range(model.nweights)])
-    model.forward(torch.tensor([1.,1.,1.,1.]))
+    model.forward(torch.tensor([1., 1., 1., 1.]))
     model.store_activation()
-    model.forward(torch.tensor([1.,1.,1.,1.]))
+    model.forward(torch.tensor([1., 1., 1., 1.]))
     model.store_activation()
 
-    model.forward(torch.tensor([1.,1.,1.,1.]))
+    model.forward(torch.tensor([1., 1., 1., 1.]))
     model.store_activation()
 
     #

@@ -25,8 +25,8 @@ def eval(data, render=False):
     # print(x.tolist())
     args = data[1]
     cumulative_rewards = []
-    task = gym.make("LunarLander-v2")
-    agent = ANHNN([8, args["hnodes"], 4], eta=0.001, history_length=10, stability_window_size=5, device="cpu")
+    task = gym.make("CartPole-v1")
+    agent = ANHNN([4, args["hnodes"], 2], eta=0.0001, history_length=10, stability_window_size=5, device="cpu")
     agent.set_hrules(x)
     for i in range(100):
         cumulative_rewards.append(0)
@@ -62,13 +62,13 @@ def generator_wrapper(func):
 
 def parallel_val(candidates, args):
     # with parallel_backend('multiprocessing'):
-    # with Pool(20) as p:
-    #     return p.map(eval, [[c, args] for c in candidates])
-    res = []
-    print(args)
-    for c in candidates:
-        res.append(eval((c, json.loads(json.dumps(args)))))
-    return res
+    with Pool(5) as p:
+        return p.map(eval, [[c, args] for c in candidates])
+    # res = []
+    # print(args)
+    # for c in candidates:
+    #     res.append(eval((c, json.loads(json.dumps(args)))))
+    # return res
 
 
 def experiment_launcher(config):
@@ -84,7 +84,7 @@ def experiment_launcher(config):
     os.makedirs("./results_pr_rl_ll/" + str(ps[0]) + "/" + str(prate) + "/" + str(hnodes) + "/" + str(seed),
                 exist_ok=True)
 
-    fka = ANHNN([8, hnodes, 4], eta=0.001, history_length=10, stability_window_size=5, device="cpu")
+    fka = ANHNN([4, hnodes, 2], eta=0.001, history_length=20, stability_window_size=10, device="cpu")
     rng = np.random.default_rng()
     # fka.set_hrules(rng.random(fka.tns * 4))
     args = {}
@@ -92,18 +92,18 @@ def experiment_launcher(config):
     args["sigma"] = 1.0  # default standard deviation
     args["num_offspring"] = 20  # 4 + int(math.floor(3 * math.log(fka.nweights * 4)))  # lambda
     args["pop_size"] = int(math.floor(args["num_offspring"] / 2))  # mu
-    args["max_generations"] = (100 - args["pop_size"]) // args["num_offspring"] + 1
+    args["max_generations"] = (2000 - args["pop_size"]) // args["num_offspring"] + 1
     args["pop_init_range"] = [-1, 1]  # Range for the initial population
     args["hnodes"] = hnodes
     args["seed"] = seed
     random = Random(seed)
-    es = LMMAES(args["num_vars"], lambda_=5, mu=4, sigma=1)
+    # es = LMMAES(args["num_vars"], lambda_=20, mu=10, sigma=1)
 
-    # es = cmaes(generator(random, args),
-    #            args["sigma"],
-    #            {'popsize': args["num_offspring"],
-    #             'seed': seed,
-    #             'CMA_mu': args["pop_size"]})
+    es = cmaes(generator(random, args),
+               args["sigma"],
+               {'popsize': args["num_offspring"],
+                'seed': seed,
+                'CMA_mu': args["pop_size"]})
     gen = 0
     logs = []
     while gen <= args["max_generations"]:
@@ -117,7 +117,7 @@ def experiment_launcher(config):
         logs.append(log)
 
         print(log)
-        es.tell(fitnesses)
+        es.tell(candidates,fitnesses)
         gen += 1
     final_pop = np.asarray(es.ask())
     final_pop_fitnesses = np.asarray(parallel_val(final_pop, args))
@@ -144,6 +144,6 @@ if __name__ == "__main__":
         for prate in [0]:
             for hnodes in [5]:
                 dir = "./results_pr_rl_ll/" + str(ps[0]) + "/" + str(prate) + "/" + str(hnodes) + "/" + str(seed) + "/"
-                if not chs(dir):
-                    experiment_launcher({"seed": seed, "prate": prate, "ps": ps, "hnodes": hnodes})
-                    print("ended experiment " + str({"seed": seed, "prate": prate, "ps": ps, "hnodes": hnodes}))
+                # if not chs(dir):
+                experiment_launcher({"seed": seed, "prate": prate, "ps": ps, "hnodes": hnodes})
+                print("ended experiment " + str({"seed": seed, "prate": prate, "ps": ps, "hnodes": hnodes}))
