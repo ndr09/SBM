@@ -16,7 +16,7 @@ from torchvision import datasets, transforms
 import torch.nn.functional as F
 import torch
 from vision_task import eval_minst
-from network_pt import ANHNN
+from network5 import NNN
 import json
 
 
@@ -25,9 +25,9 @@ def eval(data, render=False):
     # print(x.tolist())
     args = data[1]
     cumulative_rewards = []
-    task = gym.make("LunarLander-v2")
-    agent = ANHNN([8, args["hnodes"], 4], eta=0.001, history_length=10, stability_window_size=5, device="cpu")
-    agent.set_hrules(x)
+    task = gym.make("CartPole-v1")
+    agent = NNN([4, args["hnodes"], 2])
+    agent.set_weights(x)
     for i in range(100):
         cumulative_rewards.append(0)
         done = False
@@ -35,13 +35,11 @@ def eval(data, render=False):
         obs = task.reset()
         # counter = 0
         while not done:
-            output = agent.forward(torch.tensor(obs, dtype=torch.float))
-
+            output = agent.activate(obs)
             if render:
                 task.render()
-            obs, rew, done, _ = task.step(np.argmax(output).item())
+            obs, rew, done, _ = task.step(np.argmax(output))
             cumulative_rewards[-1] += rew
-            agent.update_weights()
 
     return -np.mean(cumulative_rewards)
 
@@ -70,10 +68,10 @@ def experiment_launcher(config):
     hnodes = config["hnodes"]
     print(config)
 
-    fka = ANHNN([8, hnodes, 4], eta=0.001, history_length=10, stability_window_size=5, device="cpu")
+    fka = NNN([4, hnodes, 2])
     rng = np.random.default_rng()
     args = {}
-    args["num_vars"] = fka.nparams.item()  # Number of dimensions of the search space
+    args["num_vars"] = fka.nweights  # Number of dimensions of the search space
     args["sigma"] = 1.0  # default standard deviation
     args["num_offspring"] = 20  # 4 + int(math.floor(3 * math.log(fka.nweights * 4)))  # lambda
     args["pop_size"] = int(math.floor(args["num_offspring"] / 2))  # mu
@@ -83,7 +81,12 @@ def experiment_launcher(config):
     args["seed"] = seed
     args["dir"] = config["dir"]
     random = Random(seed)
-    es = LMMAES(args["num_vars"], lambda_=20, mu=10, sigma=1)
+    es = cmaes(generator(random, args),
+               args["sigma"],
+               {'popsize': args["num_offspring"],
+                'seed': seed}
+               )
+    #LMMAES(args["num_vars"], lambda_=4, mu=2, sigma=1, m=args["num_vars"])
 
     gen = 0
     logs = []
@@ -101,7 +104,7 @@ def experiment_launcher(config):
 
         logs.append(log)
 
-        es.tell(fitnesses)
+        es.tell(candidates, fitnesses)
         gen += 1
 
     best_guy = es.best.x
@@ -121,17 +124,13 @@ def chs(dir):
 
 if __name__ == "__main__":
     seed = int(sys.argv[1])
-    for ps in [[1], [10], [20]]:
-        for prate in [0, 80, 90]:
-            for hnodes in [5, 20, 90]:
 
-                os.makedirs("./results_pt_NHNN/", exist_ok=True)
-                os.makedirs("./results_pt_NHNN/" + str(ps[0]), exist_ok=True)
-                os.makedirs("./results_pt_NHNN/" + str(ps[0]) + "/" + str(prate), exist_ok=True)
-                os.makedirs("./results_pt_NHNN/" + str(ps[0]) + "/" + str(prate) + "/" + str(hnodes), exist_ok=True)
-                os.makedirs("./results_pt_NHNN/" + str(ps[0]) + "/" + str(prate) + "/" + str(hnodes) + "/" + str(seed),
-                            exist_ok=True)
-                dir = "./results_pt_NHNN/" + str(ps[0]) + "/" + str(prate) + "/" + str(hnodes) + "/" + str(seed) + "/"
-                if not chs(dir):
-                    experiment_launcher({"seed": seed, "prate": prate, "ps": ps, "hnodes": hnodes, "dir": dir})
-                    print("ended experiment " + str({"seed": seed, "prate": prate, "ps": ps, "hnodes": hnodes}))
+    for hnodes in [5, 20, 90]:
+        dir = "./results_NNN/"
+        os.makedirs(dir, exist_ok=True)
+        os.makedirs(dir + str(hnodes), exist_ok=True)
+        os.makedirs(dir +  str(hnodes) + "/" + str(seed),  exist_ok=True)
+        dir = dir + "/" + str(hnodes) + "/" + str(seed) + "/"
+        if not chs(dir):
+            experiment_launcher({"seed": seed,  "hnodes": hnodes, "dir": dir})
+            print("ended experiment " + str({"seed": seed, "hnodes": hnodes}))
