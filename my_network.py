@@ -107,7 +107,7 @@ class HostSingleNN(NN):
 
 
 # an NN with multiple HNN which determine its weights
-class HostHNN(NN):
+class HostMultipleHNN(NN):
     def __init__(self, nodes: list, guestNodes: list, eta: float):
         super().__init__(nodes)
         self.guestNodes = guestNodes
@@ -174,4 +174,41 @@ class HostHNN(NN):
                     self.guests[i - 1][j][k].update_weights()
 
 
+class HostSingleHNN(NN): 
+    def __init__(self, nodes: list, guestNodes: list):
+        super().__init__(nodes)
+        self.guestNodes = guestNodes
+
+        self.guestnWeights = sum([self.guestNodes[i] * self.guestNodes[i + 1] for i in
+                             range(len(self.guestNodes) - 1)])
+
+        # init a guestNN
+        self.guest = HNN(self.guestNodes, 0.01)
+
+        self.init_weights()
+
+    # initialize all the weights to zero
+    def init_weights(self):
+        # foreach layer, input excluded
+        for i in range(1, len(self.nodes)):
+            # initialize the weights from layer i-1 to layer i to 0
+            self.weights[i - 1] = [[0 for _ in range(self.nodes[i - 1])] for __ in range(self.nodes[i])]
     
+    # set the weights of the guest and activate them to get the host's weights
+    def set_weights(self, weights=None):  
+
+        self.guest.set_hrules(weights)
+        # reset the weights of the host to zero
+        self.init_weights()
+
+        # foreach layer, input excluded
+        for i in range(1, len(self.nodes)):        
+            # for each node in layer i
+            for j in range(self.nodes[i]):
+                 # for each node in layer i - 1
+                for k in range(self.nodes[i - 1]):
+                    # set the weight as the output of the guest
+                    # TODO: check activate output
+                    self.weights[i - 1][j][k] = self.guest.activate([i-1, j])[0]
+    
+ 
