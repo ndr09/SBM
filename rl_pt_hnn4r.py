@@ -90,8 +90,6 @@ def experiment_launcher(config):
                 'CMA_mu': args["pop_size"]})
 
 
-
-
     #LMMAES(args["num_vars"], lambda_=20, mu=10, sigma=1)
 
     gen = 0
