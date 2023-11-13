@@ -3,7 +3,7 @@ import math
 import os
 import sys
 from optimizer import *
-import gym
+import gymnasium as gym
 from network_pt import NHNN
 import numpy as np
 import functools
@@ -25,14 +25,14 @@ def eval(data, render=False):
     # print(x.tolist())
     args = data[1]
     cumulative_rewards = []
-    task = gym.make("Ant-v2")
+    task = gym.make("Ant-v4")
     agent = NHNN([27, 128, 64, 8], 0.0001, device="cpu")
     agent.set_hrules(x)
     for i in range(1):
         cumulative_rewards.append(0)
         done = False
-        task.reset(seed=i, options={})
-        obs = task.reset()
+        obs, _ = task.reset(seed=i, options={})
+
         # counter = 0
         while not done:
             output = agent.forward(torch.tensor(obs, dtype=torch.float))
