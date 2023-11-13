@@ -360,7 +360,7 @@ class EvolutionStrategy(object):
                 x = []
                 x2 = []
                 for w in self.coeffs:
-                    j = self.rng.randn(*w.shape)  # j: (coefficients_per_synapse, 1) eg. (5,1)
+                    j = self.rng.standard_normal(*w.shape)  # j: (coefficients_per_synapse, 1) eg. (5,1)
                     x.append(j)  # x: (coefficients_per_synapse, number of synapses) eg. (92690, 5)
                     x2.append(-j)
                 population.append(
@@ -372,7 +372,7 @@ class EvolutionStrategy(object):
                 x = []
                 x2 = []
                 for w in self.initial_weights_co:
-                    j = self.rng.randn(*w.shape)
+                    j = self.rng.standard_normal(*w.shape)
                     x.append(j)
                     x2.append(-j)
 
