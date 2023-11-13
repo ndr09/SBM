@@ -31,7 +31,7 @@ def eval(data, render=False):
     for i in range(1):
         cumulative_rewards.append(0)
         done = False
-        task.seed(i)
+        task.reset(seed=i, options={})
         obs = task.reset()
         # counter = 0
         while not done:
@@ -39,7 +39,8 @@ def eval(data, render=False):
 
             if render:
                 task.render()
-            obs, rew, done, _ = task.step(output)
+            obs, rew, terminated, truncated, info = task.step(output)
+            done = terminated or truncated
             cumulative_rewards[-1] += rew
             agent.update_weights()
 
