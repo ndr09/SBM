@@ -2,7 +2,7 @@ import argparse
 import math
 import os
 import sys
-from cma import CMAEvolutionStrategy as cmaes
+from optimizer import *
 import gym
 from network_pt import NHNN
 import numpy as np
@@ -25,10 +25,10 @@ def eval(data, render=False):
     # print(x.tolist())
     args = data[1]
     cumulative_rewards = []
-    task = gym.make("LunarLander-v2")
-    agent = NHNN([8, args["hnodes"], 4], 0.001, device="cpu")
+    task = gym.make("Ant-v2")
+    agent = NHNN([27, 128, 64, 8], 0.0001, device="cpu")
     agent.set_hrules(x)
-    for i in range(100):
+    for i in range(1):
         cumulative_rewards.append(0)
         done = False
         task.seed(i)
@@ -39,7 +39,7 @@ def eval(data, render=False):
 
             if render:
                 task.render()
-            obs, rew, done, _ = task.step(np.argmax(output).item())
+            obs, rew, done, _ = task.step(output)
             cumulative_rewards[-1] += rew
             agent.update_weights()
 
@@ -70,25 +70,26 @@ def experiment_launcher(config):
     hnodes = config["hnodes"]
     print(config)
 
-    fka = NHNN([8, hnodes, 4], 0.001)
+    fka = NHNN([27, 128, 64, 8], 0.001)
     rng = np.random.default_rng()
     args = {}
     args["num_vars"] = fka.nparams.item()  # Number of dimensions of the search space
+    print("this problem has "+str(args["num_vars"] )+" parameters")
     args["sigma"] = 1.0  # default standard deviation
     args["num_offspring"] = 20  # 4 + int(math.floor(3 * math.log(fka.nweights * 4)))  # lambda
     args["pop_size"] = int(math.floor(args["num_offspring"] / 2))  # mu
-    args["max_generations"] = (20000 - args["pop_size"]) // args["num_offspring"] + 1
+    args["max_generations"] = 300#(20000 - args["pop_size"]) // args["num_offspring"] + 1
     args["pop_init_range"] = [-1, 1]  # Range for the initial population
     args["hnodes"] = hnodes
     args["seed"] = seed
     args["dir"] = config["dir"]
     random = Random(seed)
-    es = cmaes(generator(random, args),
-               args["sigma"],
-               {'popsize': args["num_offspring"],
-                'seed': seed,
-                'CMA_mu': args["pop_size"]})
-
+    # es = cmaes(generator(random, args),
+    #            args["sigma"],
+    #            {'popsize': args["num_offspring"],
+    #             'seed': seed,
+    #             'CMA_mu': args["pop_size"]})
+    es = EvolutionStrategy(seed,args["num_vars"],population_size=500,learning_rate=0.2,sigma=0.1,decay=0.995 )
 
 
 
@@ -132,15 +133,15 @@ if __name__ == "__main__":
     seed = int(sys.argv[1])
     for ps in [[1], [10], [20]]:
         for prate in [0, 80, 90]:
-            for hnodes in [5, 20, 90]:
-
-                os.makedirs("./results_pt_NHNN/", exist_ok=True)
-                os.makedirs("./results_pt_NHNN/" + str(ps[0]), exist_ok=True)
-                os.makedirs("./results_pt_NHNN/" + str(ps[0]) + "/" + str(prate), exist_ok=True)
-                os.makedirs("./results_pt_NHNN/" + str(ps[0]) + "/" + str(prate) + "/" + str(hnodes), exist_ok=True)
-                os.makedirs("./results_pt_NHNN/" + str(ps[0]) + "/" + str(prate) + "/" + str(hnodes) + "/" + str(seed),
+            for hnodes in ["ml"]:
+                bd = "./results_mj_NHNN/"
+                os.makedirs(bd, exist_ok=True)
+                os.makedirs(bd + str(ps[0]), exist_ok=True)
+                os.makedirs(bd + str(ps[0]) + "/" + str(prate), exist_ok=True)
+                os.makedirs(bd + str(ps[0]) + "/" + str(prate) + "/" + str(hnodes), exist_ok=True)
+                os.makedirs(bd + str(ps[0]) + "/" + str(prate) + "/" + str(hnodes) + "/" + str(seed),
                             exist_ok=True)
-                dir = "./results_pt_NHNN/" + str(ps[0]) + "/" + str(prate) + "/" + str(hnodes) + "/" + str(seed) + "/"
+                dir = bd + str(ps[0]) + "/" + str(prate) + "/" + str(hnodes) + "/" + str(seed) + "/"
                 if not chs(dir):
                     experiment_launcher({"seed": seed, "prate": prate, "ps": ps, "hnodes": hnodes, "dir": dir})
                     print("ended experiment " + str({"seed": seed, "prate": prate, "ps": ps, "hnodes": hnodes}))
