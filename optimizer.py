@@ -438,6 +438,7 @@ class EvolutionStrategy(object):
             self.initial_weights_co[index] = w + self.update_factor * np.dot(layer_population.T, rewards).T
 
     def tell(self, fitness):
+        fitness = np.array(fitness)
         if self.coev_params is not None:
             self._update_coeffs(fitness, self._npops)
             self._update_coevolved_param(fitness, self._npops_coev)

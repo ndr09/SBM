@@ -113,6 +113,7 @@ def experiment_launcher(config):
         logs.append(log)
 
         es.tell(fitnesses)
+        print(log)
         gen += 1
 
     best_guy = es.best.x
