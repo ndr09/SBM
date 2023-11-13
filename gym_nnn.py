@@ -25,8 +25,8 @@ def eval(data, render=False):
     # print(x.tolist())
     args = data[1]
     cumulative_rewards = []
-    task = gym.make("CartPole-v1")
-    agent = NNN([4, args["hnodes"], 2])
+    task = gym.make("LunarLander-v2")
+    agent = NNN([8, args["hnodes"], 4])
     agent.set_weights(x)
     for i in range(100):
         cumulative_rewards.append(0)
@@ -68,7 +68,7 @@ def experiment_launcher(config):
     hnodes = config["hnodes"]
     print(config)
 
-    fka = NNN([4, hnodes, 2])
+    fka = NNN([8, hnodes, 4])
     rng = np.random.default_rng()
     args = {}
     args["num_vars"] = fka.nweights  # Number of dimensions of the search space
