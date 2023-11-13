@@ -39,7 +39,7 @@ def eval(data, render=False):
 
             if render:
                 task.render()
-            obs, rew, terminated, truncated, info = task.step(output)
+            obs, rew, terminated, truncated, info = task.step(output.tolist())
             done = terminated or truncated
             cumulative_rewards[-1] += rew
             agent.update_weights()
