@@ -83,7 +83,15 @@ def experiment_launcher(config):
     args["seed"] = seed
     args["dir"] = config["dir"]
     random = Random(seed)
-    es = LMMAES(args["num_vars"], lambda_=20, mu=10, sigma=1)
+    es = cmaes(generator(random, args),
+               args["sigma"],
+               {'popsize': args["num_offspring"],
+                'seed': seed,
+                'CMA_mu': args["pop_size"]})
+
+
+
+    #LMMAES(args["num_vars"], lambda_=20, mu=10, sigma=1)
 
     gen = 0
     logs = []
