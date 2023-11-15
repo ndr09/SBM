@@ -239,44 +239,10 @@ class CMAES():
         return self.pop[:]
 
 
-def compute_ranks(x):
-    """
-    Returns rank as a vector of len(x) with integers from 0 to len(x)
-    """
-    assert x.ndim == 1
-    ranks = np.empty(len(x), dtype=int)
-    ranks[x.argsort()] = np.arange(len(x))
-    return ranks
 
 
-def compute_centered_ranks(x):
-    """
-    Maps x to [-0.5, 0.5] and returns the rank
-    """
-    y = compute_ranks(x.ravel()).reshape(x.shape).astype(np.float32)
-    y /= (x.size - 1)
-    y -= .5
-    return y
 
 
-def worker_process_hebb(arg):
-    get_reward_func, hebb_rule, eng, init_weights, coeffs = arg
-
-    wp = np.array(coeffs)
-    decay = - 0.01 * np.mean(wp ** 2)
-    r = get_reward_func(hebb_rule, eng, init_weights, coeffs) + decay
-
-    return r
-
-
-def worker_process_hebb_coevo(arg):
-    get_reward_func, hebb_rule, eng, init_weights, coeffs, coevolved_parameters = arg
-
-    wp = np.array(coeffs)
-    decay = - 0.01 * np.mean(wp ** 2)
-    r = get_reward_func(hebb_rule, eng, init_weights, coeffs, coevolved_parameters) + decay
-
-    return r
 
 
 class EvolutionStrategy(object):
@@ -285,12 +251,11 @@ class EvolutionStrategy(object):
         https://github.com/enajx/HebbianMetaLearning/blob/master/evolution_strategy_hebb.py
     """
 
-    def __init__(self, seed, n_params_hebb, n_params_coev=None, init_weights='uni', population_size=100, sigma=0.1,
+    def __init__(self, seed, n_params, init_weights='uni', population_size=100, sigma=0.1,
                  learning_rate=0.2,
                  decay=0.995,  distribution='normal'):
 
-        self.n_params = n_params_hebb
-        self.coev_params = n_params_coev
+        self.n_params = n_params
         self.init_weights = init_weights
         self.POPULATION_SIZE = population_size
         self.SIGMA = sigma
@@ -299,37 +264,17 @@ class EvolutionStrategy(object):
         self.update_factor = self.learning_rate / (self.POPULATION_SIZE * self.SIGMA)
         self.distribution = distribution
 
-        self.coevolve_init = False if self.coev_params is None else True
+
         self._npops = []
         self._npops_coev = []
         self.rng = np.random.default_rng(seed)
         self.trng = torch.Generator()
         self.trng.manual_seed(seed)
-        if self.coevolve_init:
-            print('\nCo-evolving initial weights of the network')
-
-        # Initialize the values of hebbian coefficients and CNN parameters or initial weights of co-evolving initial weights
-
-        # Pixel-based environments (CNN + MLP)
-        if self.coevolve_init:
-            cnn_weights = self.coev_params  # CNN: (6, 3, 3, 3) + (8, 6, 5, 5) = 162+1200 = 1362
-            plastic_weights = self.n_params # Hebbian coefficients: MLP x coefficients_per_synapse : plastic_weights x coefficients_per_synapse
-
-            if self.distribution == 'uniform':
-                self.coeffs = self.rng.uniform(-1, 1, plastic_weights)
-                self.initial_weights_co = self.rng.uniform(-1, 1, cnn_weights)
-
-            elif self.distribution == 'normal':
-                self.coeffs = torch.randn(plastic_weights, generator=self.trng).detach().numpy().squeeze()
-                self.initial_weights_co = torch.randn(cnn_weights, generator=self.trng).detach().numpy().squeeze()
-
-                    # State-vector environments (MLP)
-        else:
-            plastic_weights = self.n_params  # Hebbian coefficients:  MLP x coefficients_per_synapse :plastic_weights x coefficients_per_synapse
-            if self.distribution == 'uniform':
-                self.coeffs = self.rng.uniform(-1, 1, plastic_weights)
-            elif self.distribution == 'normal':
-                self.coeffs = torch.randn(plastic_weights, generator=self.trng).detach().numpy().squeeze()
+        self.best = Best()
+        if self.distribution == 'uniform':
+            self.coeffs = self.rng.uniform(-1, 1, self.n_params)
+        elif self.distribution == 'normal':
+            self.coeffs = torch.randn(self.n_params, generator=self.trng).detach().numpy().squeeze()
 
     def _get_params_try(self, w, p):
 
@@ -345,63 +290,54 @@ class EvolutionStrategy(object):
     def get_coeffs(self):
         return self.coeffs.astype(np.float32)
 
-    def get_coevolved_parameters(self):
-        return self.initial_weights_co.astype(np.float32)
+    def _compute_ranks(self, x):
+        """
+        Returns rank as a vector of len(x) with integers from 0 to len(x)
+        """
+        assert x.ndim == 1
+        ranks = np.empty(len(x), dtype=int)
 
-    def _get_population(self, coevolved_param=False):
+        ranks[x.argsort()] = np.arange(len(x))
+
+        return ranks
+
+    def _compute_centered_ranks(self, x):
+        """
+        Maps x to [-0.5, 0.5] and returns the rank
+        """
+        y = self._compute_ranks(x.ravel()).reshape(x.shape).astype(np.float32)
+        y /= (x.size - 1)
+        y -= .5
+        return y
+
+    def _get_population(self):
 
         # x_ = np.random.randn(int(self.POPULATION_SIZE/2), self.coeffs.shape[0], self.coeffs[0].shape[0])
         # population = np.concatenate((x_,-1*x_)).astype(np.float32)
 
         population = []
 
-        if coevolved_param == False:
-            for i in range(int(self.POPULATION_SIZE / 2)):
-                x = []
-                x2 = []
-                for w in self.coeffs:
-                    j = self.rng.standard_normal(*w.shape)  # j: (coefficients_per_synapse, 1) eg. (5,1)
-                    x.append(j)  # x: (coefficients_per_synapse, number of synapses) eg. (92690, 5)
-                    x2.append(-j)
-                population.append(
-                    x)  # population : (population size, coefficients_per_synapse, number of synapses), eg. (10, 92690, 5)
-                population.append(x2)
+        for i in range(int(self.POPULATION_SIZE / 2)):
+            x = []
+            x2 = []
+            for w in self.coeffs:
+                j = self.rng.standard_normal(*w.shape)  # j: (coefficients_per_synapse, 1) eg. (5,1)
+                x.append(j)  # x: (coefficients_per_synapse, number of synapses) eg. (92690, 5)
+                x2.append(-j)
+            population.append(
+                x)  # population : (population size, coefficients_per_synapse, number of synapses), eg. (10, 92690, 5)
+            population.append(x2)
 
-        elif coevolved_param == True:
-            for i in range(int(self.POPULATION_SIZE / 2)):
-                x = []
-                x2 = []
-                for w in self.initial_weights_co:
-                    j = self.rng.standard_normal(*w.shape)
-                    x.append(j)
-                    x2.append(-j)
-
-                population.append(x)
-                population.append(x2)
 
         return np.array(population).astype(np.float32)
 
     def ask(self):
-        pop = self._get_population(False)
-        pop1 = None
-        if self.coev_params is not None:
-            pop1 = self._get_population(True)
-
-        if pop1 is not None:
-            self._npops = []
-            self._npops_coev = []
-            pops = []
-            for p, p1 in zip(pop, pop1):
-                self._npops.append(self._get_params_try(self.coeffs, p))
-                self._npops_coev.append(self._get_params_try(self.coeffs, p1))
-                pops.append(np.concatenate(self._npops[-1], self._npops_coev[-1]))
-            return pops
-        else:
-            self._npops = [self._get_params_try(self.coeffs, p) for p in pop]
-            return self._npops
+        pop = self._get_population()
+        self._npops = [self._get_params_try(self.coeffs, p) for p in pop]
+        return self._npops
 
     def _update_coeffs(self, rewards, population):
-        rewards = compute_centered_ranks(rewards)
+        rewards = self._compute_centered_ranks(rewards)
 
         std = rewards.std()
         if std == 0:
@@ -422,26 +358,14 @@ class EvolutionStrategy(object):
         if self.SIGMA > 0.01:
             self.SIGMA *= 0.999
 
-    def _update_coevolved_param(self, rewards, population):
-        rewards = compute_centered_ranks(rewards)
-
-        std = rewards.std()
-        if std == 0:
-            raise ValueError('Variance should not be zero')
-
-        rewards = (rewards - rewards.mean()) / std
-
-        for index, w in enumerate(self.initial_weights_co):
-            layer_population = np.array([p[index] for p in population])
-
-            self.update_factor = self.learning_rate / (self.POPULATION_SIZE * self.SIGMA)
-            self.initial_weights_co[index] = w + self.update_factor * np.dot(layer_population.T, rewards).T
 
     def tell(self, fitness):
+        # print(fitness)
         fitness = np.array(fitness)
-        if self.coev_params is not None:
-            self._update_coeffs(fitness, self._npops)
-            self._update_coevolved_param(fitness, self._npops_coev)
-        else:
-            self._update_coeffs(fitness, self._npops)
+        # print(fitness)
+
+        newBestIndex = np.argmax(fitness)
+        if self.best.f is None or fitness[newBestIndex] > self.best.f:
+            self.best = Best(self._npops[newBestIndex], fitness[newBestIndex])
+        self._update_coeffs(fitness, self._npops)
 

@@ -1,67 +1,49 @@
-
 import os
+import sys
 from optimizer import *
-import  gym
+import gymnasium as gym
 import numpy as np
 import functools
 from random import Random
 from multiprocessing import Pool
 import pickle
 import torch
-from network_pt import HNN, NHNN
+from network_pt import NHNN
 import json
+from warnings import filterwarnings
 
-gym.logger.set_level(40)
-import contextlib
-with contextlib.redirect_stdout(None):
-    import pybullet_envs
+
+
+filterwarnings(action='ignore', category=DeprecationWarning, message='`np.bool8` is a deprecated alias')
 
 def eval(data, render=False):
-    import ctypes
-    import sys
-
-
     x = data[0]
     # print(x.tolist())
     args = data[1]
     cumulative_rewards = []
-    task = None
+    task = gym.make("LunarLander-v2")
 
-    task = gym.make("AntBulletEnv-v0")
-    agent = HNN([28, 128, 64, 8], 0.01)
+    agent = NHNN([8, 8, 4], 0.001, device="cpu")
     agent.set_hrules(x)
-    obs = task.reset()
+    for i in range(100):
+        cumulative_rewards.append(0)
+        done = False
+        # task.seed(i)
+        obs,_= task.reset(seed=i)
 
-    action = np.zeros(8)
+        # counter = 0
+        while not done:
+            output = agent.forward(torch.tensor(obs, dtype=torch.float))
 
-    for _ in range(40):
-        __ = task.step(action)
-    cumulative_rewards.append(0)
-    done = False
+            if render:
+                task.render()
+            action = torch.argmax(output).tolist()
+            obs, rew, terminated, truncated, info = task.step(action)
+            done = terminated or truncated
+            cumulative_rewards[-1] += rew
+            agent.update_weights()
 
-
-    neg_count = 0
-    rew_ep = 0
-    t = 0
-    # counter = 0
-    while not done:
-        output = agent.forward(torch.tensor(obs, dtype=torch.float))
-
-        if render:
-            task.render()
-
-        obs, _, done, info = task.step(output.numpy())
-
-        rew = task.unwrapped.rewards[1]
-        rew_ep += rew
-        agent.update_weights()
-        if t > 200:
-            neg_count = neg_count + 1 if rew < 0.0 else 0
-            if (neg_count > 30):
-                done = True
-        t+=1
-
-    return rew
+    return np.mean(cumulative_rewards)
 
 
 def generator(random, args):
@@ -81,34 +63,33 @@ def generator_wrapper(func):
 def parallel_val(candidates, args):
     with Pool(20) as p:
         return p.map(eval, [[c, json.loads(json.dumps(args))] for c in candidates])
-    #res = [eval([c, json.loads(json.dumps(args))]) for c in candidates]
-    #return res
 
 def experiment_launcher(config):
     seed = config["seed"]
     hnodes = config["hnodes"]
     print(config)
 
-    fka = HHNN([8, 128, 64, 4], 0.001)
+    fka = NHNN([8, 8, 4], 0.001)
     rng = np.random.default_rng()
     args = {}
-    args["num_vars"] = fka.nweights.item()*4  # Number of dimensions of the search space
+    args["num_vars"] = fka.nparams.item()  # Number of dimensions of the search space
     print("this problem has "+str(args["num_vars"] )+" parameters")
     args["sigma"] = 1.0  # default standard deviation
     args["num_offspring"] = 20  # 4 + int(math.floor(3 * math.log(fka.nweights * 4)))  # lambda
     args["pop_size"] = int(math.floor(args["num_offspring"] / 2))  # mu
-    args["max_generations"] = 300#(20000 - args["pop_size"]) // args["num_offspring"] + 1
+    args["max_generations"] = 500#(20000 - args["pop_size"]) // args["num_offspring"] + 1
     args["pop_init_range"] = [-1, 1]  # Range for the initial population
     args["hnodes"] = hnodes
     args["seed"] = seed
     args["dir"] = config["dir"]
     random = Random(seed)
-    # es = cmaes(generator(random, args),
+    # es = CMAES(args["num_vars"],seed,[-1,1], args["num_offspring"], args["pop_size"], args["sigma"])
+    # es = CMAES(generator(random, args),
     #            args["sigma"],
     #            {'popsize': args["num_offspring"],
     #             'seed': seed,
     #             'CMA_mu': args["pop_size"]})
-    es = EvolutionStrategy(seed,args["num_vars"],population_size=500,learning_rate=0.2,sigma=0.1,decay=0.995 )
+    es = EvolutionStrategy(seed,args["num_vars"],population_size=100,learning_rate=0.1,sigma=0.2,decay=0.995 )
 
 
 
@@ -118,10 +99,10 @@ def experiment_launcher(config):
     logs = []
     while gen <= args["max_generations"]:
         candidates = es.ask()  # get list of new solutions
-        print("ask")
+
         fitnesses = parallel_val(candidates, args)
         log = "generation " + str(gen) + "  " + str(max(fitnesses)) + "  " + str(np.mean(fitnesses))
-        print(log)
+
         with open(args["dir"] + "/best_" + str(gen) + ".pkl", "wb") as f:
             pickle.dump(candidates[np.argmin(fitnesses)], f)
 
@@ -131,7 +112,7 @@ def experiment_launcher(config):
         logs.append(log)
 
         es.tell(fitnesses)
-        print("tell")
+        print(log)
         gen += 1
 
     best_guy = es.best.x
@@ -150,11 +131,11 @@ def chs(dir):
 
 
 if __name__ == "__main__":
-    seed = 0#int(sys.argv[1])
-    for ps in [[1], [10], [20]]:
-        for prate in [0, 80, 90]:
+    seed = int(sys.argv[1])
+    for ps in [[101]]:
+        for prate in [0]:
             for hnodes in ["ml"]:
-                bd = "./results_pbant_NHNN/"
+                bd = "./results_ll_NHNN/"
                 os.makedirs(bd, exist_ok=True)
                 os.makedirs(bd + str(ps[0]), exist_ok=True)
                 os.makedirs(bd + str(ps[0]) + "/" + str(prate), exist_ok=True)
