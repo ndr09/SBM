@@ -8,11 +8,12 @@ from random import Random
 from multiprocessing import Pool
 import pickle
 import torch
-from network_pt import HNN, NHNN
+from network_pt import NHNN
 import json
 
 gym.logger.set_level(40)
 import contextlib
+from PIL import Image
 with contextlib.redirect_stdout(None):
     import pybullet_envs
 
@@ -28,40 +29,46 @@ def eval(data, render=False):
     task = None
 
     task = gym.make("AntBulletEnv-v0")
-    agent = HNN([28, 128, 64, 8], 0.01)
+    agent = NHNN([28, 128, 64, 8], 0.01, init="rand")
     agent.set_hrules(x)
     obs = task.reset()
 
-    action = np.zeros(8)
-
-    for _ in range(40):
-        __ = task.step(action)
+    action = np.ones(8)
+    #
+    # for i in range(40):
+    #     _,_,done,_ = task.step(action)
+    #     a = task.render(mode="rgb_array")
+    #     print(i, done)
+    #     im = Image.fromarray(a)
+    #     im.save("img/"+str(i)+".jpeg")
     cumulative_rewards.append(0)
     done = False
-
+    # exit(1)
 
     neg_count = 0
     rew_ep = 0
     t = 0
     # counter = 0
     while not done:
+
         output = agent.forward(torch.tensor(obs, dtype=torch.float))
 
         if render:
-            task.render()
+            task.render(mode="human")
 
         obs, _, done, info = task.step(output.numpy())
 
         rew = task.unwrapped.rewards[1]
         rew_ep += rew
         agent.update_weights()
+
         if t > 200:
             neg_count = neg_count + 1 if rew < 0.0 else 0
             if (neg_count > 30):
                 done = True
         t+=1
-
-    return rew
+    # print("=====", t)
+    return rew_ep
 
 
 def generator(random, args):
@@ -81,18 +88,18 @@ def generator_wrapper(func):
 def parallel_val(candidates, args):
     with Pool(20) as p:
         return p.map(eval, [[c, json.loads(json.dumps(args))] for c in candidates])
-    #res = [eval([c, json.loads(json.dumps(args))]) for c in candidates]
-    #return res
+    # res = [eval([c, json.loads(json.dumps(args))]) for c in candidates]
+    # return res
 
 def experiment_launcher(config):
     seed = config["seed"]
     hnodes = config["hnodes"]
     print(config)
 
-    fka = HHNN([8, 128, 64, 4], 0.001)
+    fka = NHNN([28, 128, 64, 8], 0.001)
     rng = np.random.default_rng()
     args = {}
-    args["num_vars"] = fka.nweights.item()*4  # Number of dimensions of the search space
+    args["num_vars"] = fka.nparams.item()  # Number of dimensions of the search space
     print("this problem has "+str(args["num_vars"] )+" parameters")
     args["sigma"] = 1.0  # default standard deviation
     args["num_offspring"] = 20  # 4 + int(math.floor(3 * math.log(fka.nweights * 4)))  # lambda
@@ -151,6 +158,7 @@ def chs(dir):
 
 if __name__ == "__main__":
     seed = 0#int(sys.argv[1])
+    debug = True
     for ps in [[1], [10], [20]]:
         for prate in [0, 80, 90]:
             for hnodes in ["ml"]:
@@ -162,6 +170,6 @@ if __name__ == "__main__":
                 os.makedirs(bd + str(ps[0]) + "/" + str(prate) + "/" + str(hnodes) + "/" + str(seed),
                             exist_ok=True)
                 dir = bd + str(ps[0]) + "/" + str(prate) + "/" + str(hnodes) + "/" + str(seed) + "/"
-                if not chs(dir):
+                if not chs(dir) or debug:
                     experiment_launcher({"seed": seed, "prate": prate, "ps": ps, "hnodes": hnodes, "dir": dir})
                     print("ended experiment " + str({"seed": seed, "prate": prate, "ps": ps, "hnodes": hnodes}))

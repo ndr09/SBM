@@ -33,7 +33,7 @@ from scipy.stats import kstest
 
 
 class NN(nn.Module):
-    def __init__(self, nodes: list, grad=False, device="cpu"):
+    def __init__(self, nodes: list, grad=False, init=None, device="cpu"):
         super(NN, self).__init__()
         self.device = torch.device(device)
         self.nodes = torch.tensor(nodes).to(self.device)
@@ -42,9 +42,11 @@ class NN(nn.Module):
 
         self.networks = []
         self.activations = []
+        self.grad = grad
         for i in range(len(nodes) - 1):
             self.networks.append(nn.Linear(nodes[i], nodes[i + 1], bias=False))
-        self.set_weights([0. for _ in range(self.nweights)])
+        if init is None:
+            self.set_weights([0. for _ in range(self.nweights)])
         self.double()
 
     def forward(self, inputs):
@@ -52,10 +54,11 @@ class NN(nn.Module):
             self.activations = []
             x = inputs.to(self.device)
             self.activations.append(torch.clone(x).to(self.device))
-
+            c = 0
             for l in self.networks:
                 x = l(x)
                 x = torch.tanh(x)
+                c+=1
                 self.activations.append(torch.clone(x))
 
             return x
@@ -67,10 +70,9 @@ class NN(nn.Module):
         return tmp
 
     def set_weights(self, weights):
-
         if type(weights) == list and type(weights[0]) == torch.Tensor:
             for i in range(len(self.networks)):
-                self.networks[i].weight = nn.Parameter(weights[i])
+                self.networks[i].weight = nn.Parameter(weights[i], requires_grad=self.grad)
         elif len(weights) == self.nweights:
             tmp = self.get_weights()
             start = 0
@@ -85,8 +87,8 @@ class NN(nn.Module):
 
 
 class HNN(NN):
-    def __init__(self, nodes: list, eta: float, hrules=None, grad=False):
-        super(HNN, self).__init__(nodes, grad=grad)
+    def __init__(self, nodes: list, eta: float, hrules=None, grad=False, init=None):
+        super(HNN, self).__init__(nodes, grad=grad, init=init)
 
         self.hrules = []
         self.eta = eta
@@ -126,8 +128,8 @@ class HNN(NN):
 
 
 class NHNN(NN):
-    def __init__(self, nodes: list, eta: float, hrules=None, grad=False, device="cpu"):
-        super(NHNN, self).__init__(nodes, grad=grad, device=device)
+    def __init__(self, nodes: list, eta: float, hrules=None, grad=False, device="cpu", init=None):
+        super(NHNN, self).__init__(nodes, grad=grad, device=device, init=init)
 
         self.hrules = []
         self.nparams = sum(self.nodes) * 4 - self.nodes[0] - self.nodes[-1]
@@ -193,6 +195,7 @@ class NHNN(NN):
             dw = pre_i + post_j + torch.where((c_i == 1.) & (c_j == 1.), 0, c_i * c_j) + torch.where((d_i == 1.) & (d_j == 1.), 0, d_i * d_j)
             dws.append(dw)
             l += self.eta * dw
+
         self.set_weights(weights)
 
 
@@ -265,16 +268,11 @@ class ANHNN(NHNN):
 
 
 if __name__ == "__main__":
-    model = ANHNN([4, 2, 1], 0.1, 3, 1, hrules=[float(i) for i in range(23)])
-    model.set_weights([float(i) for i in range(model.nweights)])
-    model.forward(torch.tensor([1., 1., 1., 1.]))
-    model.store_activation()
-    model.forward(torch.tensor([1., 1., 1., 1.]))
-    model.store_activation()
-
-    model.forward(torch.tensor([1., 1., 1., 1.]))
-    model.store_activation()
-
+    model = NHNN([4, 2, 2,5], 0.1, hrules=[float(i) for i in range(43)], init="rand")
+    print(model.get_weights())
+    #model.set_weights([float(i) for i in range(model.nweights)])
+    print("f", model.forward(torch.tensor([1., 1., 1., 1.])))
+    model.update_weights()
     #
     # print(model.get_weights())
     print(model.hrules)
