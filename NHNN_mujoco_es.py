@@ -22,20 +22,30 @@ def eval(data, render=False):
     import sys
 
 
-    x = data[0]
+
     # print(x.tolist())
     args = data[1]
     cumulative_rewards = []
     task = None
 
     task = gym.make("AntBulletEnv-v0")
-    agent = NHNN([28, 128, 64, 8], 0.01, init="rand")
+    agent = NHNN([28, 128, 64, 8], 0.01, init="uni")
+    x = data[0]
+    hr = data[0][:agent.nparams.item()]
+    etas = data[0][agent.nparams.item():]
+    weights = agent.get_weights()
+    # print([weights[i] for i in range(len(weights))])
+    tmp = np.array([])
+    for l in weights:
+        tmp = np.concatenate((tmp, torch.flatten(l).numpy()))
 
-    decay = - 0.01 * np.mean(agent.get_weights() ** 2)
-    agent.set_hrules(x)
+    decay = - 0.01 * np.mean(tmp ** 2)
+
+    agent.set_hrules(hr)
+    agent.set_eta(etas)
     obs = task.reset()
 
-    action = np.ones(8)
+    #action = np.ones(8)
     #
     # for i in range(40):
     #     _,_,done,_ = task.step(action)
@@ -89,10 +99,10 @@ def generator_wrapper(func):
 
 
 def parallel_val(candidates, args):
-    with Pool(20) as p:
-        return p.map(eval, [[c, json.loads(json.dumps(args))] for c in candidates])
-    # res = [eval([c, json.loads(json.dumps(args))]) for c in candidates]
-    # return res
+    # with Pool(20) as p:
+    #     return p.map(eval, [[c, json.loads(json.dumps(args))] for c in candidates])
+    res = [eval([c, json.loads(json.dumps(args))]) for c in candidates]
+    return res
 
 def experiment_launcher(config):
     seed = config["seed"]
@@ -102,7 +112,7 @@ def experiment_launcher(config):
     fka = NHNN([28, 128, 64, 8], 0.001)
     rng = np.random.default_rng()
     args = {}
-    args["num_vars"] = fka.nparams.item()  # Number of dimensions of the search space
+    args["num_vars"] = fka.nparams.item()+sum(fka.nodes.tolist())  # Number of dimensions of the search space
     print("this problem has "+str(args["num_vars"] )+" parameters")
     args["sigma"] = 1.0  # default standard deviation
     args["num_offspring"] = 20  # 4 + int(math.floor(3 * math.log(fka.nweights * 4)))  # lambda
@@ -118,7 +128,7 @@ def experiment_launcher(config):
     #            {'popsize': args["num_offspring"],
     #             'seed': seed,
     #             'CMA_mu': args["pop_size"]})
-    es = EvolutionStrategy(seed,args["num_vars"],population_size=500,learning_rate=0.2,sigma=0.1,decay=0.995 )
+    es = EvolutionStrategy(seed,args["num_vars"],population_size=10,learning_rate=0.2,sigma=0.1,decay=0.995 )
 
 
 

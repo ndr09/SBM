@@ -50,19 +50,19 @@ class NN(nn.Module):
         else:
             for l in self.networks:
                 if init == 'xa_uni':
-                    torch.nn.init.xavier_uniform(l.data, 0.3)
+                    torch.nn.init.xavier_uniform(l.weight.data, 0.3)
                 elif init == 'sparse':
-                    torch.nn.init.sparse_(l.data, 0.8)
+                    torch.nn.init.sparse_(l.weight.data, 0.8)
                 elif init == 'uni':
-                    torch.nn.init.uniform_(l.data, -0.1, 0.1)
+                    torch.nn.init.uniform_(l.weight.data, -0.1, 0.1)
                 elif init == 'normal':
-                    torch.nn.init.normal_(l.data, 0, 0.024)
+                    torch.nn.init.normal_(l.weight.data, 0, 0.024)
                 elif init == 'ka_uni':
-                    torch.nn.init.kaiming_uniform_(l.data, 3)
+                    torch.nn.init.kaiming_uniform_(l.weight.data, 3)
                 elif init == 'uni_big':
-                    torch.nn.init.uniform_(l.data, -1, 1)
+                    torch.nn.init.uniform_(l.weight.data, -1, 1)
                 elif init == 'xa_uni_big':
-                    torch.nn.init.xavier_uniform(l.data)
+                    torch.nn.init.xavier_uniform(l.weight.data)
         self.double()
 
     def forward(self, inputs):
@@ -158,7 +158,9 @@ class NHNN(NN):
 
         self.hrules = []
         self.nparams = sum(self.nodes) * 4 - self.nodes[0] - self.nodes[-1]
-        self.eta = torch.tensor(eta).to(self.device)
+        self.eta = []
+        self.set_eta([eta for _ in range(sum(self.nodes))])
+        self.eta
         if hrules is not None:
             self.set_hrules(hrules)
 
@@ -190,10 +192,12 @@ class NHNN(NN):
         self.hrules.append(torch.hstack((tmp1, tmp)).to(self.device))
 
     def set_eta(self, etas:list):
+        assert len(etas) == sum(self.nodes), "needed " + str(
+            sum(self.nodes)) + " received " + str(len(etas))
         self.eta = []
         start = 0
         for l in self.nodes:
-            self.eta.append(torch.tensro(etas[start:start+l]))
+            self.eta.append(torch.tensor(etas[start:start+l]).to(self.device))
             start += l
 
 
@@ -227,8 +231,12 @@ class NHNN(NN):
 
             dw = pre_i + post_j + torch.where((c_i == 1.) & (c_j == 1.), 0, c_i * c_j) + torch.where((d_i == 1.) & (d_j == 1.), 0, d_i * d_j)
             dws.append(dw)
-
-            l += (self.eta[i]+self.eta[i+1])/2 * dw
+            # print(self.eta[i].repeat(activations_i1.size()[0], 1).size(),
+            #       torch.reshape(self.eta[i+1], (activations_i1.size()[0], 1)).repeat((1, activations_i.size()[0])).size(),
+            #       dw.size())
+            pre_eta = self.eta[i].repeat(activations_i1.size()[0], 1)
+            post_eta =  torch.reshape(self.eta[i+1], (activations_i1.size()[0], 1)).repeat((1, activations_i.size()[0]))
+            l += (pre_eta+post_eta)/2 * dw
 
         self.set_weights(weights)
 
