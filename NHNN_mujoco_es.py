@@ -30,6 +30,7 @@ def eval(data, render=False):
 
     task = gym.make("AntBulletEnv-v0")
     agent = NHNN([28, 128, 64, 8], 0.01, init="rand")
+    decay = - 0.01 * np.mean(agent.get_weights().numpy() ** 2)
     agent.set_hrules(x)
     obs = task.reset()
 
@@ -68,7 +69,8 @@ def eval(data, render=False):
                 done = True
         t+=1
     # print("=====", t)
-    return rew_ep
+
+    return rew_ep+decay
 
 
 def generator(random, args):
@@ -104,7 +106,7 @@ def experiment_launcher(config):
     args["sigma"] = 1.0  # default standard deviation
     args["num_offspring"] = 20  # 4 + int(math.floor(3 * math.log(fka.nweights * 4)))  # lambda
     args["pop_size"] = int(math.floor(args["num_offspring"] / 2))  # mu
-    args["max_generations"] = 300#(20000 - args["pop_size"]) // args["num_offspring"] + 1
+    args["max_generations"] = 500#(20000 - args["pop_size"]) // args["num_offspring"] + 1
     args["pop_init_range"] = [-1, 1]  # Range for the initial population
     args["hnodes"] = hnodes
     args["seed"] = seed
@@ -157,10 +159,10 @@ def chs(dir):
 
 
 if __name__ == "__main__":
-    seed = 0#int(sys.argv[1])
+    seed = int(sys.argv[1])
     debug = True
-    for ps in [[1], [10], [20]]:
-        for prate in [0, 80, 90]:
+    for ps in [[101]]:
+        for prate in [0]:
             for hnodes in ["ml"]:
                 bd = "./results_pbant_NHNN/"
                 os.makedirs(bd, exist_ok=True)

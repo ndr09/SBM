@@ -47,6 +47,22 @@ class NN(nn.Module):
             self.networks.append(nn.Linear(nodes[i], nodes[i + 1], bias=False))
         if init is None:
             self.set_weights([0. for _ in range(self.nweights)])
+        else:
+            for l in self.networks:
+                if init == 'xa_uni':
+                    torch.nn.init.xavier_uniform(l.data, 0.3)
+                elif init == 'sparse':
+                    torch.nn.init.sparse_(l.data, 0.8)
+                elif init == 'uni':
+                    torch.nn.init.uniform_(l.data, -0.1, 0.1)
+                elif init == 'normal':
+                    torch.nn.init.normal_(l.data, 0, 0.024)
+                elif init == 'ka_uni':
+                    torch.nn.init.kaiming_uniform_(l.data, 3)
+                elif init == 'uni_big':
+                    torch.nn.init.uniform_(l.data, -1, 1)
+                elif init == 'xa_uni_big':
+                    torch.nn.init.xavier_uniform(l.data)
         self.double()
 
     def forward(self, inputs):
@@ -97,12 +113,21 @@ class HNN(NN):
             self.set_hrules(hrules)
 
     def set_hrules(self, hrules: list):
-        assert len(hrules) == self.nweights * 4
+        assert len(hrules) == self.nweights * 4, "needed " + str(
+            self.nweights * 4) + " received " + str(len(hrules))
         start = 0
         for l in self.get_weights():
             size = l.size()[0] * l.size()[1] * 4 + start
             params = torch.tensor(hrules[start:size])
             self.hrules.append(torch.reshape(params, (l.size()[0], l.size()[1], 4)))
+            start = size
+    def set_etas(self, etas:list):
+        start = 0
+        self.eta = []
+        for l in self.get_weights():
+            size = l.size()[0] * l.size()[1] + start
+            params = torch.tensor(etas[start:size])
+            self.eta.append(torch.reshape(params, (l.size()[0], l.size()[1])))
             start = size
 
     def update_weights(self):
@@ -122,7 +147,7 @@ class HNN(NN):
             C = C_i * C_j
             D = hrule_i[:, :, 3]
             dw = pre + post + C + D
-            weights[i] += self.eta * dw
+            weights[i] += self.eta[i] * dw
 
         self.set_weights(weights)
 
@@ -164,6 +189,14 @@ class NHNN(NN):
         tmp1 = torch.tensor([[0.] for i in range(self.nodes[-1])])
         self.hrules.append(torch.hstack((tmp1, tmp)).to(self.device))
 
+    def set_eta(self, etas:list):
+        self.eta = []
+        start = 0
+        for l in self.nodes:
+            self.eta.append(torch.tensro(etas[start:start+l]))
+            start += l
+
+
     def update_weights(self):
         weights = self.get_weights()
         num_layers = len(weights)
@@ -194,7 +227,8 @@ class NHNN(NN):
 
             dw = pre_i + post_j + torch.where((c_i == 1.) & (c_j == 1.), 0, c_i * c_j) + torch.where((d_i == 1.) & (d_j == 1.), 0, d_i * d_j)
             dws.append(dw)
-            l += self.eta * dw
+
+            l += (self.eta[i]+self.eta[i+1])/2 * dw
 
         self.set_weights(weights)
 
@@ -268,7 +302,8 @@ class ANHNN(NHNN):
 
 
 if __name__ == "__main__":
-    model = NHNN([4, 2, 2,5], 0.1, hrules=[float(i) for i in range(43)], init="rand")
+    model = HNN([4, 2, 2,5], 0.1, hrules=[float(i) for i in range(88)], init="rand")
+    model.set_etas([0.5 for i in range(22)])
     print(model.get_weights())
     #model.set_weights([float(i) for i in range(model.nweights)])
     print("f", model.forward(torch.tensor([1., 1., 1., 1.])))
