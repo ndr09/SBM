@@ -1,4 +1,4 @@
-
+import sys
 import os
 from optimizer import *
 import  gym
@@ -30,7 +30,8 @@ def eval(data, render=False):
 
     task = gym.make("AntBulletEnv-v0")
     agent = NHNN([28, 128, 64, 8], 0.01, init="rand")
-    decay = - 0.01 * np.mean(agent.get_weights().numpy() ** 2)
+
+    decay = - 0.01 * np.mean(agent.get_weights() ** 2)
     agent.set_hrules(x)
     obs = task.reset()
 
