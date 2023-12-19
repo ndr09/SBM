@@ -6,6 +6,9 @@ import networkx as nx
 import matplotlib.pyplot as plt
 import pickle
 from scipy.stats import kstest
+from numba import njit
+
+
 
 
 class NN():
@@ -102,6 +105,7 @@ class NN():
                     matrix[ix][ox] = self.weights[i - 1][j][k]
         return matrix
 
+
 class NNN():
     def __init__(self, nodes: list):
         self.nodes = nodes
@@ -117,7 +121,7 @@ class NNN():
             for j in range(self.nodes[i]):
                 sum = 0  # self.weights[i - 1][j][0]
                 for k in range(self.nodes[i - 1]):
-                    sum += self.activations[i - 1][k - 1] * self.weights[i - 1][k]*self.weights[i][j]
+                    sum += self.activations[i - 1][k - 1] * self.weights[i - 1][k] * self.weights[i][j]
                 self.activations[i][j] = np.tanh(sum)
         return np.array(self.activations[-1])
 
@@ -192,7 +196,6 @@ class NNN():
                     ox = j + (sum(self.nodes[:i]))
                     matrix[ix][ox] = self.weights[i - 1][j][k]
         return matrix
-
 
 
 class HNN(NN):
@@ -319,6 +322,7 @@ class HNN(NN):
         self.set_weights(ppToThr)
         self.set_hrules(prules)
 
+
 class HNN4R(NN):
     def __init__(self, nodes, eta=0.1):
         super().__init__(nodes)
@@ -326,7 +330,6 @@ class HNN4R(NN):
         self.hrules = [[[0, 0, 0, 0] for i in range(node)] for node in nodes]
         self.eta = eta
         self.set_weights([0 for _ in range(self.nweights)])
-
 
     def set_hrules(self, hrules):
         c = 0
@@ -339,7 +342,7 @@ class HNN4R(NN):
                     self.hrules[layer][node][3] = hrules[c + 2]  # hrules[c + 1]
                     c += 3
 
-                elif layer == (len(self.nodes) - 1): #output
+                elif layer == (len(self.nodes) - 1):  # output
                     self.hrules[layer][node][0] = 0
                     self.hrules[layer][node][1] = hrules[c]  # hrules[c + 1]
                     self.hrules[layer][node][2] = hrules[c + 1]  # hrules[c + 1]
@@ -367,6 +370,64 @@ class HNN4R(NN):
                             self.hrules[l][o][3] * self.hrules[l - 1][i - 1][3])
                     self.weights[l - 1][o][i] += self.eta * dw
 
+
+class WLNHNN(NN):
+    def __init__(self, nodes, eta=0.1):
+        super().__init__(nodes)
+
+        self.hrules = [[[0, 0, 0, 0, 0, 0] for i in range(node)] for node in nodes]
+        self.eta = eta
+        self.nparams = (sum(nodes)*4)-nodes[0]-nodes[-1]
+
+    def activate(self, inputs):
+        self.activations[0] = [np.tanh(x) for x in inputs]
+        for l in range(1, len(self.nodes)):
+            self.activations[l] = [0. for _ in range(self.nodes[l])]
+            for o in range(self.nodes[l]):
+                sum = 0  # self.weights[i - 1][j][0]
+                for i in range(self.nodes[l - 1]):
+                    dw = (
+                            self.hrules[l - 1][i][2] * self.hrules[l][o][2] * self.activations[l - 1][i] *
+                            self.activations[l][o] +  # both
+                            self.hrules[l][o][1] * self.activations[l][o] +  # post
+                            self.hrules[l - 1][i][0] * self.activations[l - 1][i] +  # pre
+                            self.hrules[l][o][3] * self.hrules[l - 1][i][3])
+                    eta = 0.5 * (self.hrules[l][o][4] + self.hrules[l - 1][i][4])
+                    self.hrules[l][o][5] += eta * dw
+                    self.hrules[l - 1][i][5] += eta * dw
+                    sum += eta * dw
+                self.activations[l][o] = np.tanh(sum)
+        return np.array(self.activations[-1])
+
+    def set_hrules(self, hrules):
+        c = 0
+        for layer in range(len(self.nodes)):
+            for node in range(self.nodes[layer]):
+                if layer == 0:  # input
+                    self.hrules[layer][node][0] = hrules[c]
+                    self.hrules[layer][node][1] = 0  # hrules[c + 1]
+                    self.hrules[layer][node][2] = hrules[c + 1]  # hrules[c + 1]
+                    self.hrules[layer][node][3] = hrules[c + 2]  # hrules[c + 1]
+                    self.hrules[layer][node][4] = hrules[c + 3]
+                    c += 4
+
+                elif layer == (len(self.nodes) - 1):  # output
+                    self.hrules[layer][node][0] = 0
+                    self.hrules[layer][node][1] = hrules[c]  # hrules[c + 1]
+                    self.hrules[layer][node][2] = hrules[c + 1]  # hrules[c + 1]
+                    self.hrules[layer][node][3] = hrules[c + 2]  # hrules[c + 1]
+                    self.hrules[layer][node][4] = hrules[c + 3]
+                    c += 4
+
+                else:
+                    self.hrules[layer][node][0] = hrules[c]
+                    self.hrules[layer][node][1] = hrules[c + 1]  # hrules[c + 1]
+                    self.hrules[layer][node][2] = hrules[c + 2]  # hrules[c + 1]
+                    self.hrules[layer][node][3] = hrules[c + 3]  # hrules[c + 1]
+                    self.hrules[layer][node][4] = hrules[c + 4]
+                    c += 5
+
+
 class HNN4Rauto(NN):
     def __init__(self, nodes, eta=0.1, ahl=10, rst=3):
         super().__init__(nodes)
@@ -374,7 +435,7 @@ class HNN4Rauto(NN):
         self.hrules = [[[0, 0, 0, 0] for i in range(node)] for node in nodes]
         self.eta = eta
         self.set_weights([0 for _ in range(self.nweights)])
-        #self.hrules = np.array((self.tns, 4), dtype=float)
+        # self.hrules = np.array((self.tns, 4), dtype=float)
         self.nins = self.tns - self.nodes[0]  # non input nodes
         self.act_history = np.zeros((ahl, self.nins), dtype=float)
         self.ahl = ahl  # activation history length
@@ -392,7 +453,7 @@ class HNN4Rauto(NN):
                     self.hrules[layer][node][1] = 0  # hrules[c + 1]
                     self.hrules[layer][node][2] = hrules[c + 1]  # hrules[c + 1]
                     self.hrules[layer][node][3] = hrules[c + 2]  # hrules[c + 1]
-                    #self.hrules[layer][node][4] = hrules[c + 3]  # hrules[c + 1]
+                    # self.hrules[layer][node][4] = hrules[c + 3]  # hrules[c + 1]
                     c += 3
 
                 elif layer == (len(self.nodes) - 1):
@@ -400,7 +461,7 @@ class HNN4Rauto(NN):
                     self.hrules[layer][node][1] = hrules[c]  # hrules[c + 1]
                     self.hrules[layer][node][2] = hrules[c + 1]  # hrules[c + 1]
                     self.hrules[layer][node][3] = hrules[c + 2]  # hrules[c + 1]
-                    #self.hrules[layer][node][4] = hrules[c + 3]  # hrules[c + 1]
+                    # self.hrules[layer][node][4] = hrules[c + 3]  # hrules[c + 1]
 
                     c += 3
 
@@ -409,7 +470,7 @@ class HNN4Rauto(NN):
                     self.hrules[layer][node][1] = hrules[c + 1]  # hrules[c + 1]
                     self.hrules[layer][node][2] = hrules[c + 2]  # hrules[c + 1]
                     self.hrules[layer][node][3] = hrules[c + 3]  # hrules[c + 1]
-                    #self.hrules[layer][node][4] = hrules[c + 3]  # hrules[c + 1]
+                    # self.hrules[layer][node][4] = hrules[c + 3]  # hrules[c + 1]
 
                     c += 4
 
@@ -446,7 +507,7 @@ class HNN4Rauto(NN):
             self.act_history[self.iah] = self._copy_act()
             self.iah += 1
         if self.iah == self.ahl:
-            self.act_history = np.vstack((self.act_history,self._copy_act()))[1:]
+            self.act_history = np.vstack((self.act_history, self._copy_act()))[1:]
             self.prune_stable_nodes()
 
     def _copy_act(self):
@@ -461,7 +522,7 @@ class HNN4Rauto(NN):
         stability = np.zeros(self.nins, dtype=np.int8)
         x = self.act_history.transpose()[:, :self.ahl - self.rst]
         y = self.act_history.transpose()[:, self.ahl - self.rst:]
-        #print((self.act_history.shape, x.shape,y.shape))
+        # print((self.act_history.shape, x.shape,y.shape))
         for i in range(self.nins):
             if i not in self.stable_nodes:
                 stability[i] = 1 if kstest(y[i], x[i], method="asymp")[1] > 0.05 else 0
@@ -480,23 +541,23 @@ class HNN4Rauto(NN):
             for node in range(self.nodes[layer]):
                 tmp = []
                 for l in range(4):
-                        tmp.append(self.hrules[layer][node][l])
-                        c += 1
+                    tmp.append(self.hrules[layer][node][l])
+                    c += 1
                 flat_rules.append(tmp[:])
         return flat_rules
 
     def prune_stable_nodes(self):
         stability = self.check_stability()
         hrules = self.get_hrules_for_nodes()
-        #print(len(hrules))
-        #print(len(stability))
+        # print(len(hrules))
+        # print(len(stability))
         for i in range(self.nins):
             if stability[i] == 1:
                 hrules[i] = self.prune(hrules[i])
 
     def prune(self, hrules):
         # prune A if the
-        #print(hrules)
+        # print(hrules)
         hrules[0] = 0
         hrules[1] = 0
         hrules[2] = 1
@@ -2478,9 +2539,8 @@ class SBNN2R(HNN):
 
 
 if __name__ == "__main__":
-   a = NNN([1,2,3])
-   print(a.weights)
+    a = WLNHNN([1, 2, 3])
 
-   a.set_weights([5 for i in range(6)])
-   print(a.weights)
-   print(a.activate([1.]))
+    a.set_hrules([1 for i in range(26)])
+    print(a.weights)
+    print(a.activate([1.]))

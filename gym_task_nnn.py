@@ -2,7 +2,7 @@ import os
 
 from cma import CMAEvolutionStrategy as cmaes
 import gym
-from network5 import NNN
+from network5 import WLNHNN
 import numpy as np
 import functools
 from random import Random
@@ -11,9 +11,9 @@ import pickle
 
 def eval(x, render=False):
     cumulative_rewards = []
-    task = gym.make("CartPole-v1")
-    agent = NNN([4, 5, 2])
-    agent.set_weights(x)
+    task = gym.make("LunarLander-v2")
+    agent = WLNHNN([8, 10, 4])
+    agent.set_hrules(x)
     for i in range(100):
         cumulative_rewards.append(0)
         done = False
@@ -52,15 +52,15 @@ def parallel_val(candidates):
 
 if __name__ == "__main__":
     args = {}
-    fka = NNN([4, 5, 2])
+    fka = WLNHNN([8, 10, 4])
     rng = np.random.default_rng()
     #eval(rng.random(fka.nweights*4), render=True)
-    os.makedirs("results_nnn", exist_ok=True)
+    os.makedirs("results_wnh", exist_ok=True)
 
-    args["num_vars"] = fka.nweights  # Number of dimensions of the search space
-    args["max_generations"] = 50
+    args["num_vars"] = fka.nparams  # Number of dimensions of the search space
+    args["max_generations"] = 100
     args["sigma"] = 1.0  # default standard deviation
-    args["pop_size"] = 4  # mu
+    args["pop_size"] = 10  # mu
     args["num_offspring"] = 20  # lambda
     args["pop_init_range"] = [-1, 1]  # Range for the initial population
 
@@ -82,5 +82,5 @@ if __name__ == "__main__":
 
     best_guy = es.best.x
     best_fitness = es.best.f
-    with open("./results_nnn/nnn_test_"+str(best_fitness)+".pkl", "wb") as f:
+    with open("./results_wnh/nwnh_test_"+str(best_fitness)+".pkl", "wb") as f:
         pickle.dump(best_guy, f)
