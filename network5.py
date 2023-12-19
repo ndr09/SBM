@@ -6,7 +6,6 @@ import networkx as nx
 import matplotlib.pyplot as plt
 import pickle
 from scipy.stats import kstest
-from numba import njit
 
 
 
@@ -375,9 +374,9 @@ class WLNHNN(NN):
     def __init__(self, nodes, eta=0.1):
         super().__init__(nodes)
 
-        self.hrules = [[[0, 0, 0, 0, 0, 0] for i in range(node)] for node in nodes]
+        self.hrules = [[[0, 0, 0, 0, 0, 0, 0] for i in range(node)] for node in nodes]
         self.eta = eta
-        self.nparams = (sum(nodes)*4)-nodes[0]-nodes[-1]
+        self.nparams = (sum(nodes)*5)-nodes[0]-nodes[-1]
 
     def activate(self, inputs):
         self.activations[0] = [np.tanh(x) for x in inputs]
@@ -386,18 +385,21 @@ class WLNHNN(NN):
             for o in range(self.nodes[l]):
                 sum = 0  # self.weights[i - 1][j][0]
                 for i in range(self.nodes[l - 1]):
-                    dw = (
-                            self.hrules[l - 1][i][2] * self.hrules[l][o][2] * self.activations[l - 1][i] *
-                            self.activations[l][o] +  # both
-                            self.hrules[l][o][1] * self.activations[l][o] +  # post
-                            self.hrules[l - 1][i][0] * self.activations[l - 1][i] +  # pre
-                            self.hrules[l][o][3] * self.hrules[l - 1][i][3])
-                    eta = 0.5 * (self.hrules[l][o][4] + self.hrules[l - 1][i][4])
-                    self.hrules[l][o][5] += eta * dw
-                    self.hrules[l - 1][i][5] += eta * dw
-                    sum += eta * dw
+                    dw0 = self.cdw(l,i,o,5)
+                    dw1 = self.cdw(l,i,o,6)
+                    sum += (dw0+dw1)*self.activations[l-1][i]
                 self.activations[l][o] = np.tanh(sum)
         return np.array(self.activations[-1])
+
+    def cdw(self, l, i, o, t):
+        dw = (
+                self.hrules[l - 1][i][2] * self.hrules[l][o][2] * self.hrules[l - 1][i][t] *
+                self.hrules[l][o][t] +  # both
+                self.hrules[l][o][1] * self.hrules[l][o][t] +  # post
+                self.hrules[l - 1][i][0] * self.hrules[l - 1][i][t] +  # pre
+                self.hrules[l][o][3] * self.hrules[l - 1][i][3])
+        eta = 0.5 * (self.hrules[l][o][4] + self.hrules[l - 1][i][4])
+        return eta*dw
 
     def set_hrules(self, hrules):
         c = 0
