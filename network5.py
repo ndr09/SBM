@@ -380,6 +380,10 @@ class WLNHNN(NN):
 
     def activate(self, inputs):
         self.activations[0] = [np.tanh(x) for x in inputs]
+        for i in range(len(inputs)):
+            self.hrules[0][i][5] =self.hrules[0][i][6]
+            self.hrules[0][i][6] = self.activations[0][i]
+
         for l in range(1, len(self.nodes)):
             self.activations[l] = [0. for _ in range(self.nodes[l])]
             for o in range(self.nodes[l]):
@@ -389,6 +393,8 @@ class WLNHNN(NN):
                     dw1 = self.cdw(l,i,o,6)
                     sum += (dw0+dw1)*self.activations[l-1][i]
                 self.activations[l][o] = np.tanh(sum)
+                self.hrules[l][o][5] = self.hrules[l][o][6]
+                self.hrules[l][o][6] = self.activations[l][o]
         return np.array(self.activations[-1])
 
     def cdw(self, l, i, o, t):
