@@ -1,5 +1,7 @@
 import sys
 import os
+import time
+
 from optimizer import *
 import  gym
 import numpy as np
@@ -7,8 +9,8 @@ import functools
 from random import Random
 from multiprocessing import Pool
 import pickle
-import torch
-from network_pt import NHNN
+
+from network5 import WLNHNN
 import json
 
 gym.logger.set_level(40)
@@ -29,22 +31,11 @@ def eval(data, render=False):
     task = None
 
     task = gym.make("AntBulletEnv-v0")
-    agent = NHNN([28, 128, 64, 8], 0.01, init="uni")
+    agent = WLNHNN([28, 128, 64, 8], 0.01)
     x = data[0]
-    hr = data[0][:agent.nparams.item()]
-    etas = data[0][agent.nparams.item():]
-    weights = agent.get_weights()
-    # print([weights[i] for i in range(len(weights))])
-    tmp = np.array([])
-    for l in weights:
-        tmp = np.concatenate((tmp, torch.flatten(l).numpy()))
-
-    decay = - 0.01 * np.mean(tmp ** 2)
-
-    agent.set_hrules(hr)
-    agent.set_eta(etas)
+    agent.set_hrules(x)
     obs = task.reset()
-
+    start = time.time()
     #action = np.ones(8)
     #
     # for i in range(40):
@@ -63,25 +54,24 @@ def eval(data, render=False):
     # counter = 0
     while not done:
 
-        output = agent.forward(torch.tensor(obs, dtype=torch.float))
+        output = agent.activate(obs)
 
         if render:
             task.render(mode="human")
 
-        obs, _, done, info = task.step(output.numpy())
+        obs, _, done, info = task.step(output)
 
         rew = task.unwrapped.rewards[1]
         rew_ep += rew
-        agent.update_weights()
 
         if t > 200:
             neg_count = neg_count + 1 if rew < 0.0 else 0
             if (neg_count > 30):
                 done = True
         t+=1
-    # print("=====", t)
+    print("=====", time.time()-start)
 
-    return rew_ep+decay
+    return -rew_ep
 
 
 def generator(random, args):
@@ -106,29 +96,28 @@ def parallel_val(candidates, args):
 
 def experiment_launcher(config):
     seed = config["seed"]
-    hnodes = config["hnodes"]
+
     print(config)
 
-    fka = NHNN([28, 128, 64, 8], 0.001)
+    fka = WLNHNN([28, 128, 64, 8], 0.001)
     rng = np.random.default_rng()
     args = {}
-    args["num_vars"] = fka.nparams.item()+sum(fka.nodes.tolist())  # Number of dimensions of the search space
+    args["num_vars"] = fka.nparams # Number of dimensions of the search space
     print("this problem has "+str(args["num_vars"] )+" parameters")
     args["sigma"] = 1.0  # default standard deviation
-    args["num_offspring"] = 20  # 4 + int(math.floor(3 * math.log(fka.nweights * 4)))  # lambda
+    args["num_offspring"] = 4  # 4 + int(math.floor(3 * math.log(fka.nweights * 4)))  # lambda
     args["pop_size"] = int(math.floor(args["num_offspring"] / 2))  # mu
-    args["max_generations"] = 500#(20000 - args["pop_size"]) // args["num_offspring"] + 1
+    args["max_generations"] = 1#(20000 - args["pop_size"]) // args["num_offspring"] + 1
     args["pop_init_range"] = [-1, 1]  # Range for the initial population
-    args["hnodes"] = hnodes
     args["seed"] = seed
-    args["dir"] = config["dir"]
+    args["dir"] = "whl_ant/"+str(seed)
     random = Random(seed)
-    # es = cmaes(generator(random, args),
-    #            args["sigma"],
-    #            {'popsize': args["num_offspring"],
-    #             'seed': seed,
-    #             'CMA_mu': args["pop_size"]})
-    es = EvolutionStrategy(seed,args["num_vars"],population_size=10,learning_rate=0.2,sigma=0.1,decay=0.995 )
+    es = cmaes(generator(random, args),
+               args["sigma"],
+               {'popsize': args["num_offspring"],
+                'seed': seed,
+                'CMA_mu': args["pop_size"]})
+    #es = EvolutionStrategy(seed,args["num_vars"],population_size=10,learning_rate=0.2,sigma=0.1,decay=0.995 )
 
 
 
@@ -150,7 +139,7 @@ def experiment_launcher(config):
 
         logs.append(log)
 
-        es.tell(fitnesses)
+        es.tell(candidates,fitnesses)
         print("tell")
         gen += 1
 
@@ -171,18 +160,7 @@ def chs(dir):
 
 if __name__ == "__main__":
     seed = int(sys.argv[1])
-    debug = True
-    for ps in [[101]]:
-        for prate in [0]:
-            for hnodes in ["ml"]:
-                bd = "./results_pbant_NHNN/"
-                os.makedirs(bd, exist_ok=True)
-                os.makedirs(bd + str(ps[0]), exist_ok=True)
-                os.makedirs(bd + str(ps[0]) + "/" + str(prate), exist_ok=True)
-                os.makedirs(bd + str(ps[0]) + "/" + str(prate) + "/" + str(hnodes), exist_ok=True)
-                os.makedirs(bd + str(ps[0]) + "/" + str(prate) + "/" + str(hnodes) + "/" + str(seed),
-                            exist_ok=True)
-                dir = bd + str(ps[0]) + "/" + str(prate) + "/" + str(hnodes) + "/" + str(seed) + "/"
-                if not chs(dir) or debug:
-                    experiment_launcher({"seed": seed, "prate": prate, "ps": ps, "hnodes": hnodes, "dir": dir})
-                    print("ended experiment " + str({"seed": seed, "prate": prate, "ps": ps, "hnodes": hnodes}))
+    os.makedirs("whl_ant", exist_ok=True)
+    os.makedirs("whl_ant/"+str(seed), exist_ok=True)
+    experiment_launcher({"seed": seed})
+    print("ended experiment " + str({"seed": seed}))
