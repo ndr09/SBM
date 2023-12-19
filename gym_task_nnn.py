@@ -1,4 +1,5 @@
 import os
+import sys
 
 from cma import CMAEvolutionStrategy as cmaes
 import gym
@@ -54,8 +55,10 @@ if __name__ == "__main__":
     args = {}
     fka = WLNHNN([8, 10, 4])
     rng = np.random.default_rng()
+    seed = int(sys.argv[1])
     #eval(rng.random(fka.nweights*4), render=True)
     os.makedirs("results_wnh", exist_ok=True)
+    os.makedirs("results_wnh/"+str(seed), exist_ok=True)
 
     args["num_vars"] = fka.nparams  # Number of dimensions of the search space
     args["max_generations"] = 100
@@ -64,7 +67,7 @@ if __name__ == "__main__":
     args["num_offspring"] = 20  # lambda
     args["pop_init_range"] = [-1, 1]  # Range for the initial population
 
-    random = Random(0)
+    random = Random(seed)
     es = cmaes(generator(random, args),
                args["sigma"],
                {'popsize': args["num_offspring"],
@@ -74,7 +77,10 @@ if __name__ == "__main__":
     while gen <= args["max_generations"]:
         candidates = es.ask()  # get list of new solutions
         fitnesses = parallel_val(candidates)
-        print("generation "+str(gen)+"  "+str(min(fitnesses))+"  "+str(np.mean(fitnesses)))
+        log = "generation "+str(gen)+"  "+str(min(fitnesses))+"  "+str(np.mean(fitnesses))
+        print(log)
+        with open("results_wnh/"+str(seed) + "/tlog.txt", "a") as f:
+            f.write(log + "\n")
         es.tell(candidates, fitnesses)
         gen += 1
     final_pop = np.asarray(es.ask())
@@ -82,5 +88,5 @@ if __name__ == "__main__":
 
     best_guy = es.best.x
     best_fitness = es.best.f
-    with open("./results_wnh/nwnh_test_"+str(best_fitness)+".pkl", "wb") as f:
+    with open("./results_wnh/"+str(seed)+"nwnh_test_"+str(best_fitness)+".pkl", "wb") as f:
         pickle.dump(best_guy, f)
