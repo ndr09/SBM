@@ -6,7 +6,10 @@ import networkx as nx
 import matplotlib.pyplot as plt
 import pickle
 from scipy.stats import kstest
-
+import numba
+from numba.experimental import jitclass
+from numba.typed import List
+import torch
 
 
 
@@ -434,6 +437,98 @@ class WLNHNN(NN):
                     self.hrules[layer][node][3] = hrules[c + 3]  # hrules[c + 1]
                     self.hrules[layer][node][4] = hrules[c + 4]
                     c += 5
+
+tmp = List()
+tmp.append(0)
+
+@jitclass(
+    [('nodes', numba.typeof(tmp)), ("nnodes", numba.typeof(0)), ("activations", numba.typeof(np.zeros((2,1) ,dtype=float))),
+     ('hrules',numba.typeof( np.zeros((2,1) ,dtype=float))), ('nparams', numba.typeof(0))])
+class numWLNHNN():
+    def __init__(self, nodes):
+        self.nodes = nodes
+        self.nnodes = self.sa(self.nodes)
+        self.activations = np.zeros((self.nnodes, 1))
+        self.hrules = np.zeros((self.nnodes, 7))
+        self.nparams = (self.nnodes * 5) - nodes[0] - nodes[-1]
+
+    def sa(self, arr):
+        s = 0
+        for e in arr:
+            s += e
+        return s
+
+    def call(self, inputs):
+        return self.forward(inputs)
+
+    def forward(self, inputs):
+        for i in range(len(inputs)):
+            self.activations[i] = np.tanh(inputs[i])
+        for i in range(len(inputs)):
+            self.hrules[i,5] = self.hrules[i,6]
+            self.hrules[i,6] = self.activations[i,0]
+        offset = self.nodes[0]
+        for l in range(1, len(self.nodes)):
+
+            for o in range(self.nodes[l]):
+                act = 0  # self.weights[i - 1][j][0]
+                for i in range(self.nodes[l - 1]):
+                    dw0 = self.cdw(l, i, o, 5)
+                    dw1 = self.cdw(l, i, o, 6)
+                    act += (dw0 + dw1) * self.activations[self.sa(self.nodes[:l - 1]) + i,0]
+                # print(l,i,o,offset)
+                self.activations[offset + o] = np.tanh(act)
+                self.hrules[offset + o,5] = self.hrules[offset + o,6]
+                self.hrules[offset + o,6] = self.activations[offset + o,0]
+            offset += self.nodes[l]
+
+        return self.activations[self.sa(self.nodes) - self.nodes[-1]:]
+
+    def cdw(self, l, i, o, t):
+        offsetI = self.sa(self.nodes[:l - 1])
+        offsetO = self.sa(self.nodes[:l])
+
+        dw = (
+                self.hrules[offsetI + i,2] * self.hrules[offsetO + o,2] * self.hrules[offsetI + i,t] *
+                self.hrules[offsetO + o,t] +  # both
+                self.hrules[offsetO + o,1] * self.hrules[offsetO + o,t] +  # post
+                self.hrules[offsetI + i,0] * self.hrules[offsetI + i,t] +  # pre
+                self.hrules[offsetO + o,3] * self.hrules[offsetI + i,3])
+        eta = 0.5 * (self.hrules[offsetO + o,4] + self.hrules[offsetI + i,4])
+        return eta * dw
+
+
+    def set_hrules(self, hrules):
+        c = 0
+        start = 0
+        for layer in range(len(self.nodes)):
+            for node in range(self.nodes[layer]):
+                if layer == 0:  # input
+                    self.hrules[start + node][0] = hrules[c]
+                    self.hrules[start + node][1] = 0  # hrules[c + 1]
+                    self.hrules[start + node][2] = hrules[c + 1]  # hrules[c + 1]
+                    self.hrules[start + node][3] = hrules[c + 2]  # hrules[c + 1]
+                    self.hrules[start + node][4] = hrules[c + 3]
+                    c += 4
+
+                elif layer == (len(self.nodes) - 1):  # output
+                    self.hrules[start + node][0] = 0
+                    self.hrules[start + node][1] = hrules[c]  # hrules[c + 1]
+                    self.hrules[start + node][2] = hrules[c + 1]  # hrules[c + 1]
+                    self.hrules[start + node][3] = hrules[c + 2]  # hrules[c + 1]
+                    self.hrules[start + node][4] = hrules[c + 3]
+                    c += 4
+
+                else:
+                    self.hrules[start + node][0] = hrules[c]
+                    self.hrules[start + node][1] = hrules[c + 1]  # hrules[c + 1]
+                    self.hrules[start + node][2] = hrules[c + 2]  # hrules[c + 1]
+                    self.hrules[start + node][3] = hrules[c + 3]  # hrules[c + 1]
+                    self.hrules[start + node][4] = hrules[c + 4]
+                    c += 5
+            start += self.nodes[layer]
+
+        # print(self.hrules)
 
 
 class HNN4Rauto(NN):

@@ -10,7 +10,7 @@ from random import Random
 from multiprocessing import Pool
 import pickle
 
-from network5 import WLNHNN
+from network5 import numWLNHNN
 import json
 
 gym.logger.set_level(40)
@@ -18,7 +18,7 @@ import contextlib
 from PIL import Image
 with contextlib.redirect_stdout(None):
     import pybullet_envs
-
+from numba.typed import List
 def eval(data, render=False):
     import ctypes
     import sys
@@ -31,7 +31,13 @@ def eval(data, render=False):
     task = None
 
     task = gym.make("AntBulletEnv-v0")
-    agent = WLNHNN([28, 128, 64, 8], 0.01)
+    nodes = List()
+    nodes.append(28)
+    nodes.append(128)
+    nodes.append(64)
+    nodes.append(8)
+
+    agent = numWLNHNN(nodes)
     x = data[0]
     agent.set_hrules(x)
     obs = task.reset()
@@ -54,7 +60,7 @@ def eval(data, render=False):
     # counter = 0
     while not done:
 
-        output = agent.activate(obs)
+        output = agent.call(obs)
 
         if render:
             task.render(mode="human")
@@ -98,8 +104,13 @@ def experiment_launcher(config):
     seed = config["seed"]
 
     print(config)
+    nodes = List()
+    nodes.append(28)
+    nodes.append(128)
+    nodes.append(64)
+    nodes.append(8)
 
-    fka = WLNHNN([28, 128, 64, 8], 0.001)
+    fka = numWLNHNN(nodes)
     rng = np.random.default_rng()
     args = {}
     args["num_vars"] = fka.nparams # Number of dimensions of the search space
