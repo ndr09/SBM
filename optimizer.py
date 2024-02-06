@@ -115,7 +115,6 @@ class LMMAES(object):
         self.population = []
         self.best = Best()
 
-
     def ask(self):
         """
         Generate a new population of individuals
@@ -239,10 +238,39 @@ class CMAES():
         return self.pop[:]
 
 
+class ESE():
+    def __init__(self, seed, length, npop, sigma):
+        self.seed = seed
+        self.length = length
+        self.npop = npop
+        self.sigma = sigma
+        self.rng = np.random.default_rng(seed)
+        self.fitness = np.zeros(npop)
+        self.elite = None
+        self.parents = []
 
+    def ask(self):
+        if self.elite is None:
+            return self.rng.uniform(-1., 1., (self.npop, self.length))
+        else:
+            sums = np.mean(self.parents, axis=0)
 
+            ns = []
+            for i in range(self.npop - 1):
+                a = sums + self.rng.standard_normal(size=self.length) * self.sigma
+                ns.append(a)
 
+            ns.append(self.elite[1])
+            return ns
 
+    def tell(self, pop, fits):
+        elites = [(fits[i], pop[i]) for i in range(self.npop)]
+        self.fitness = fits
+        elites.sort(reverse=True, key=lambda t: t[0])
+        
+        if self.elite is None or elites[0][0] > self.elite[0]:
+            self.elite = elites[0]
+        self.parents = np.array([t[1] for t in elites[:self.npop // 4]])
 
 
 class EvolutionStrategy(object):
@@ -253,7 +281,7 @@ class EvolutionStrategy(object):
 
     def __init__(self, seed, n_params, init_weights='uni', population_size=100, sigma=0.1,
                  learning_rate=0.2,
-                 decay=0.995,  distribution='normal'):
+                 decay=0.995, distribution='normal'):
 
         self.n_params = n_params
         self.init_weights = init_weights
@@ -263,7 +291,6 @@ class EvolutionStrategy(object):
         self.decay = decay
         self.update_factor = self.learning_rate / (self.POPULATION_SIZE * self.SIGMA)
         self.distribution = distribution
-
 
         self._npops = []
         self._npops_coev = []
@@ -328,7 +355,6 @@ class EvolutionStrategy(object):
                 x)  # population : (population size, coefficients_per_synapse, number of synapses), eg. (10, 92690, 5)
             population.append(x2)
 
-
         return np.array(population).astype(np.float32)
 
     def ask(self):
@@ -358,7 +384,6 @@ class EvolutionStrategy(object):
         if self.SIGMA > 0.01:
             self.SIGMA *= 0.999
 
-
     def tell(self, fitness):
         # print(fitness)
         fitness = np.array(fitness)
@@ -368,4 +393,3 @@ class EvolutionStrategy(object):
         if self.best.f is None or fitness[newBestIndex] > self.best.f:
             self.best = Best(self._npops[newBestIndex], fitness[newBestIndex])
         self._update_coeffs(fitness, self._npops)
-
