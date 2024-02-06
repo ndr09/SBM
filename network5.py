@@ -374,10 +374,11 @@ class HNN4R(NN):
 
 
 class WLNHNN(NN):
-    def __init__(self, nodes, eta=0.1):
+    def __init__(self, nodes, window, eta=0.1):
         super().__init__(nodes)
 
-        self.hrules = [[[0, 0, 0, 0, 0, 0, 0] for i in range(node)] for node in nodes]
+        self.hrules = [[[0 for _ in range(window+5)] for i in range(node)] for node in nodes]
+        self.window = window
         self.eta = eta
         self.nparams = (sum(nodes)*5)-nodes[0]-nodes[-1]
 
@@ -392,12 +393,16 @@ class WLNHNN(NN):
             for o in range(self.nodes[l]):
                 sum = 0  # self.weights[i - 1][j][0]
                 for i in range(self.nodes[l - 1]):
-                    dw0 = self.cdw(l,i,o,5)
-                    dw1 = self.cdw(l,i,o,6)
-                    sum += (dw0+dw1)*self.activations[l-1][i]
+                    dw = 0
+                    for w in range(self.window):
+                        dw += self.cdw(l,i,o,5+w)
+
+                    sum += (dw)*self.activations[l-1][i]
                 self.activations[l][o] = np.tanh(sum)
-                self.hrules[l][o][5] = self.hrules[l][o][6]
-                self.hrules[l][o][6] = self.activations[l][o]
+                for w in range(6, 5+self.window):
+                    self.hrules[l][o][w-1] = self.hrules[l][o][w]
+
+                self.hrules[l][o][-1] = self.activations[l][o]
         return np.array(self.activations[-1])
 
     def cdw(self, l, i, o, t):
@@ -443,15 +448,16 @@ tmp.append(0)
 
 @jitclass(
     [('nodes', numba.typeof(tmp)), ("nnodes", numba.typeof(0)), ("activations", numba.typeof(np.zeros((2,1) ,dtype=float))),
-     ('hrules',numba.typeof( np.zeros((2,1) ,dtype=float))), ('nparams', numba.typeof(0))])
+     ('hrules',numba.typeof( np.zeros((2,1) ,dtype=float))), ('nparams', numba.typeof(0)), ('window', numba.typeof(0)) , ('t', numba.typeof(0))])
 class numWLNHNN():
-    def __init__(self, nodes):
+    def __init__(self, nodes, window):
         self.nodes = nodes
         self.nnodes = self.sa(self.nodes)
         self.activations = np.zeros((self.nnodes, 1))
-        self.hrules = np.zeros((self.nnodes, 7))
+        self.hrules = np.zeros((self.nnodes, 5+window))
+        self.window = window
         self.nparams = (self.nnodes * 5) - nodes[0] - nodes[-1]
-
+        self.t = 0
     def sa(self, arr):
         s = 0
         for e in arr:
@@ -462,25 +468,35 @@ class numWLNHNN():
         return self.forward(inputs)
 
     def forward(self, inputs):
+        mw = self.t if self.t < self.window else self.window
         for i in range(len(inputs)):
-            self.activations[i] = np.tanh(inputs[i])
+            self.activations[i] = inputs[i]
+
         for i in range(len(inputs)):
-            self.hrules[i,5] = self.hrules[i,6]
-            self.hrules[i,6] = self.activations[i,0]
+            for w in range(6, mw + 5):
+                self.hrules[i, w - 1] = self.hrules[i, w]
+            self.hrules[i, mw + 5] = self.activations[i, 0]
+
         offset = self.nodes[0]
         for l in range(1, len(self.nodes)):
 
             for o in range(self.nodes[l]):
                 act = 0  # self.weights[i - 1][j][0]
                 for i in range(self.nodes[l - 1]):
-                    dw0 = self.cdw(l, i, o, 5)
-                    dw1 = self.cdw(l, i, o, 6)
-                    act += (dw0 + dw1) * self.activations[self.sa(self.nodes[:l - 1]) + i,0]
+                    dw = 0.
+
+                    for w in range(5, mw+5):
+                        dw += self.cdw(l, i, o, w)
+
+                    act += (dw) * self.activations[self.sa(self.nodes[:l - 1]) + i,0]
                 # print(l,i,o,offset)
                 self.activations[offset + o] = np.tanh(act)
-                self.hrules[offset + o,5] = self.hrules[offset + o,6]
-                self.hrules[offset + o,6] = self.activations[offset + o,0]
+                for w in range(6, mw+5):
+                    self.hrules[offset + o,w-1] = self.hrules[offset + o,w]
+                self.hrules[offset + o,mw+5] = self.activations[offset + o,0]
             offset += self.nodes[l]
+        if not self.t == self.window:
+            self.t+=1
 
         return self.activations[self.sa(self.nodes) - self.nodes[-1]:]
 
