@@ -133,7 +133,7 @@ def phase_code(inputs, n_timesteps):
 def eval(x, render=False):
     cumulative_rewards = []
     task = gym.make("CartPole-v1")
-    agent = SNN([8, 4, 4, 2], 20)
+    agent = SNN([8, 10, 10, 10, 2], 20)
     agent.set_params(x)
     for i in range(100):
         cumulative_rewards.append(0)
@@ -315,18 +315,100 @@ def plot_average_fitnesses(files, output_file_name):
     plt.savefig(f'./' + output_file_name)
 
 
-def cart_pole_SNN_latencycode(baseFolder):
+def plot_average_fitnesses(files, output_file_name):
+    all_avg_scores = []
+    all_best_scores = []
+
+    for file in files:
+        average_scores, best_scores = leggi_dati_da_file(file)
+        all_avg_scores.append(average_scores)
+        all_best_scores.append(best_scores)
+
+    # Calcola la media, il valore minimo e il valore massimo per i dati
+    avg_scores_mean = np.mean(all_avg_scores, axis=0)
+    avg_scores_min = np.min(all_avg_scores, axis=0)
+    avg_scores_max = np.max(all_avg_scores, axis=0)
+    lower_error_avg = abs(abs(avg_scores_mean) - abs(avg_scores_min))
+    upper_error_avg = abs(abs(avg_scores_max) - abs(avg_scores_mean))
+
+    best_scores_mean = np.mean(all_best_scores, axis=0)
+    best_scores_min = np.min(all_best_scores, axis=0)
+    best_scores_max = np.max(all_best_scores, axis=0)
+    lower_error_best = abs(best_scores_mean - best_scores_min)
+    upper_error_best = abs(best_scores_max - best_scores_mean)
+
+    avg_scores_mean_cut = []
+    avg_scores_min_cut = []
+    avg_scores_max_cut = []
+    lower_error_avg_cut = []
+    upper_error_avg_cut = []
+
+    best_scores_mean_cut = []
+    best_scores_min_cut = []
+    best_scores_max_cut = []
+    lower_error_best_cut = []
+    upper_error_best_cut = []
+
+    for i in range(len(avg_scores_mean)):
+
+        avg_scores_mean_cut.append(rimuovi_nan(avg_scores_mean[i]))
+        avg_scores_min_cut.append(rimuovi_nan(avg_scores_min[i]))
+        avg_scores_max_cut.append(rimuovi_nan(avg_scores_max[i]))
+        lower_error_avg_cut.append(rimuovi_nan(lower_error_avg[i]))
+        upper_error_avg_cut.append(rimuovi_nan(upper_error_avg[i]))
+
+        best_scores_mean_cut.append(rimuovi_nan(best_scores_mean[i]))
+        best_scores_min_cut.append(rimuovi_nan(best_scores_min[i]))
+        best_scores_max_cut.append(rimuovi_nan(best_scores_max[i]))
+        lower_error_best_cut.append(rimuovi_nan(lower_error_best[i]))
+        upper_error_best_cut.append(rimuovi_nan(upper_error_best[i]))
+
+    fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(24,12))
+    colors = cm.rainbow(np.linspace(0, 1, len(avg_scores_mean)))
+
+    for i in range(len(avg_scores_mean_cut)):
+        x = list(range(sum(map(len, avg_scores_mean_cut[:i])), sum(map(len, avg_scores_mean_cut[:i+1]))))
+        axes[0].errorbar(x, avg_scores_mean_cut[i], yerr=[lower_error_avg_cut[i], upper_error_avg_cut[i]], label=f'Density {round((0.8 ** i) * 100, 1)}%', color=colors[i], ecolor='lightgray', alpha=0.7)
+        print("MEDIA AVERAGE SCORES [" + str(i) + "]:")
+        print(avg_scores_mean_cut[i])
+    
+    axes[0].axhline(y=-475, linestyle='--', color='black', label='Successful score')
+    axes[0].set_xlabel('# of generations')
+    axes[0].set_ylabel('Average score')
+    axes[0].set_title('Average scores')
+
+    for i in range(len(best_scores_mean_cut)):
+        x = list(range(sum(map(len, best_scores_mean_cut[:i])), sum(map(len, best_scores_mean_cut[:i+1]))))
+        axes[1].errorbar(x, best_scores_mean_cut[i], yerr=[lower_error_best_cut[i], upper_error_best_cut[i]], label=f'Density {round((0.8 ** i) * 100, 1)}%', color=colors[i], ecolor='lightgray', alpha=0.7)
+
+        print("MEDIA BEST SCORES [" + str(i) + "]:")
+        print(best_scores_mean_cut[i])
+
+    axes[1].axhline(y=-475, linestyle='--', color='black', label='Successful score')
+    axes[1].set_xlabel('# of generations')
+    axes[1].set_ylabel('Best score')
+    axes[1].set_title('Best guy scores')
+
+    # Includi le legende e regola gli spazi
+    for ax in axes:
+        ax.legend(loc='center left', bbox_to_anchor=(1, 0.5), ncol=1)
+    plt.subplots_adjust(right=0.82)
+
+    plt.savefig(f'./' + output_file_name)
+
+
+def cart_pole_SNN_latencycode():
         
     for tests in range(5): # esegue 5 test ed effettua il grafico con medie e error bars
 
         print("TEST " + str(tests) + " CART POLE SNN LATENCYCODE")
 
         args = {}
-        fka = SNN([8, 4, 4, 2], 20)
+        fka = SNN([8, 10, 10, 10, 2], 20)
 
         args["num_vars"] = fka.nweights + fka.nthresholds + fka.nbetas + len(fka.neurons[0])
-        args["max_total_generations"] = 500
-        args["added_generations"] = 50
+        args["max_total_generations"] = 1000
+        args["added_generations"] = 100
         args["max_initial_generations"] = 100
         args["sigma"] = 1.0
         args["pop_size"] = 4
@@ -379,9 +461,9 @@ def cart_pole_SNN_latencycode(baseFolder):
                 es.tell(candidates, fitnesses)
 
                 best_guy = es.best.x
-                best = SNN([8, 4, 4, 2], 20)
+                best = SNN([8, 10, 10, 10, 2], 20)
                 best.set_params(best_guy)
-                with open(baseFolder+"/thresholds-biases.txt", "a") as file:
+                with open("thresholds-biases.txt", "a") as file:
                     file.write("GEN " + str(gen+1) + "\n")
                     file.write("thresholds:\n")
                     d = 0
@@ -404,7 +486,7 @@ def cart_pole_SNN_latencycode(baseFolder):
             # calculate the pruning mask on the best guy in the current generation
             best_guy = es.best.x
             print(best_guy)
-            best = SNN([8, 4, 4, 2], 20)
+            best = SNN([8, 10, 10, 10, 2], 20)
             best.set_params(best_guy)
             
 
@@ -436,11 +518,10 @@ def cart_pole_SNN_latencycode(baseFolder):
 
         save_scores(average_scores_history, best_scores_history, tests, "cart_pole_SNN_latencycode_")
 
-        with open("./"+baseFolder+"/nn_cartpole_SNN_latencycode"+str(best_fitness)+".pkl", "wb") as f:
+        with open("./nn_cartpole_SNN_latencycode"+str(best_fitness)+".pkl", "wb") as f:
             pickle.dump(best_guy, f)
 
-    plot_average_fitnesses([baseFolder+'/cart_pole_SNN_latencycode_scores_run_0.txt',
-                            baseFolder+'/cart_pole_SNN_latencycode_scores_run_1.txt',
-                            baseFolder+'/cart_pole_SNN_latencycode_scores_run_2.txt',
-                            baseFolder+'/cart_pole_SNN_latencycode_scores_run_3.txt',
-                            baseFolder+'/cart_pole_SNN_latencycode_scores_run_4.txt'], baseFolder+"/CartPole_SNN_latencycode.png")
+    plot_average_fitnesses(['cart_pole_SNN_latencycode_scores_run_0.txt', 'cart_pole_SNN_latencycode_scores_run_1.txt', 'cart_pole_SNN_latencycode_scores_run_2.txt', 'cart_pole_SNN_latencycode_scores_run_3.txt', 'cart_pole_SNN_latencycode_scores_run_4.txt'], "CartPole_SNN_latencycode.png")
+
+if __name__ == "__main__":
+    plot_average_fitnesses(['cart_pole_SNN_latencycode_scores_run_0.txt', 'cart_pole_SNN_latencycode_scores_run_1.txt', 'cart_pole_SNN_latencycode_scores_run_2.txt', 'cart_pole_SNN_latencycode_scores_run_3.txt', 'cart_pole_SNN_latencycode_scores_run_4.txt'], "CartPole_SNN_latencycode.png")

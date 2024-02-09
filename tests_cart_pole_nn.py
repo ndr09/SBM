@@ -14,7 +14,7 @@ import math
 def eval(x, render=False):
     cumulative_rewards = []
     task = gym.make("CartPole-v1")
-    agent = NN([4, 5, 2], 20)
+    agent = NN([4, 8, 8, 8, 2], 20)
     agent.set_weights(x)
     for i in range(100):
         cumulative_rewards.append(0)
@@ -114,7 +114,7 @@ def leggi_dati_da_file(nome_file):
 
     return scores_history[0], scores_history[1]
 
-
+# VERSIONE ORIGINALE CON ERROR BARS AD OGNI PUNTO
 def plot_average_fitnesses(files, output_file_name):
     all_avg_scores = []
     all_best_scores = []
@@ -128,14 +128,14 @@ def plot_average_fitnesses(files, output_file_name):
     avg_scores_mean = np.mean(all_avg_scores, axis=0)
     avg_scores_min = np.min(all_avg_scores, axis=0)
     avg_scores_max = np.max(all_avg_scores, axis=0)
-    lower_error_avg = avg_scores_mean - avg_scores_min
-    upper_error_avg = avg_scores_max - avg_scores_mean
+    lower_error_avg = abs(abs(avg_scores_mean) - abs(avg_scores_min))
+    upper_error_avg = abs(abs(avg_scores_max) - abs(avg_scores_mean))
 
     best_scores_mean = np.mean(all_best_scores, axis=0)
     best_scores_min = np.min(all_best_scores, axis=0)
     best_scores_max = np.max(all_best_scores, axis=0)
-    lower_error_best = best_scores_mean - best_scores_min
-    upper_error_best = best_scores_max - best_scores_mean
+    lower_error_best = abs(best_scores_mean - best_scores_min)
+    upper_error_best = abs(best_scores_max - best_scores_mean)
 
     avg_scores_mean_cut = []
     avg_scores_min_cut = []
@@ -163,30 +163,30 @@ def plot_average_fitnesses(files, output_file_name):
         lower_error_best_cut.append(rimuovi_nan(lower_error_best[i]))
         upper_error_best_cut.append(rimuovi_nan(upper_error_best[i]))
 
-
     fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(24,12))
     colors = cm.rainbow(np.linspace(0, 1, len(avg_scores_mean)))
 
     for i in range(len(avg_scores_mean_cut)):
         x = list(range(sum(map(len, avg_scores_mean_cut[:i])), sum(map(len, avg_scores_mean_cut[:i+1]))))
-        axes[0].errorbar(x, avg_scores_mean_cut[i], yerr=[lower_error_avg_cut[i], upper_error_avg_cut[i]], label=f'Density {round((0.8 ** i) * 100, 1)}%', color=colors[i], alpha=0.7)
+        axes[0].errorbar(x, avg_scores_mean_cut[i], yerr=[lower_error_avg_cut[i], upper_error_avg_cut[i]], label=f'Density {round((0.8 ** i) * 100, 1)}%', color=colors[i], ecolor='lightgray', alpha=0.7)
         print("MEDIA AVERAGE SCORES [" + str(i) + "]:")
         print(avg_scores_mean_cut[i])
     
     axes[0].axhline(y=-475, linestyle='--', color='black', label='Successful score')
-    axes[0].set_xlabel('Numero di generazioni')
-    axes[0].set_ylabel('Punteggio medio')
+    axes[0].set_xlabel('# of generations')
+    axes[0].set_ylabel('Average score')
     axes[0].set_title('Average scores')
 
     for i in range(len(best_scores_mean_cut)):
         x = list(range(sum(map(len, best_scores_mean_cut[:i])), sum(map(len, best_scores_mean_cut[:i+1]))))
-        axes[1].errorbar(x, best_scores_mean_cut[i], yerr=[lower_error_best_cut[i], upper_error_best_cut[i]], label=f'Density {round((0.8 ** i) * 100, 1)}%', color=colors[i], alpha=0.7)
+        axes[1].errorbar(x, best_scores_mean_cut[i], yerr=[lower_error_best_cut[i], upper_error_best_cut[i]], label=f'Density {round((0.8 ** i) * 100, 1)}%', color=colors[i], ecolor='lightgray', alpha=0.7)
+
         print("MEDIA BEST SCORES [" + str(i) + "]:")
         print(best_scores_mean_cut[i])
 
     axes[1].axhline(y=-475, linestyle='--', color='black', label='Successful score')
-    axes[1].set_xlabel('Numero di generazioni')
-    axes[1].set_ylabel('Punteggio migliore')
+    axes[1].set_xlabel('# of generations')
+    axes[1].set_ylabel('Best score')
     axes[1].set_title('Best guy scores')
 
     # Includi le legende e regola gli spazi
@@ -197,14 +197,172 @@ def plot_average_fitnesses(files, output_file_name):
     plt.savefig(f'./' + output_file_name)
 
 
-def cart_pole_NN(baseFolder):
+# VERSIONE CON ERROR BARS OGNI N PUNTI
+'''def plot_average_fitnesses(files, output_file_name):
+    all_avg_scores = []
+    all_best_scores = []
+
+    for file in files:
+        average_scores, best_scores = leggi_dati_da_file(file)
+        all_avg_scores.append(average_scores)
+        all_best_scores.append(best_scores)
+
+    # Calcola la media, il valore minimo e il valore massimo per i dati
+    avg_scores_mean = np.mean(all_avg_scores, axis=0)
+    avg_scores_min = np.min(all_avg_scores, axis=0)
+    avg_scores_max = np.max(all_avg_scores, axis=0)
+    lower_error_avg = abs(abs(avg_scores_mean) - abs(avg_scores_min))
+    upper_error_avg = abs(abs(avg_scores_max) - abs(avg_scores_mean))
+
+    best_scores_mean = np.mean(all_best_scores, axis=0)
+    best_scores_min = np.min(all_best_scores, axis=0)
+    best_scores_max = np.max(all_best_scores, axis=0)
+    lower_error_best = abs(best_scores_mean - best_scores_min)
+    upper_error_best = abs(best_scores_max - best_scores_mean)
+
+    for i in range(len(lower_error_avg)):
+        for j in range(len(lower_error_avg[i])):
+            if j%5 != 0 and not math.isnan(lower_error_avg[i][j]):
+                lower_error_avg[i][j] = 0
+                upper_error_avg[i][j] = 0
+                lower_error_best[i][j] = 0
+                upper_error_best[i][j] = 0
+
+    avg_scores_mean_cut = []
+    avg_scores_min_cut = []
+    avg_scores_max_cut = []
+    lower_error_avg_cut = []
+    upper_error_avg_cut = []
+
+    best_scores_mean_cut = []
+    best_scores_min_cut = []
+    best_scores_max_cut = []
+    lower_error_best_cut = []
+    upper_error_best_cut = []
+
+    for i in range(len(avg_scores_mean)):
+
+        avg_scores_mean_cut.append(rimuovi_nan(avg_scores_mean[i]))
+        avg_scores_min_cut.append(rimuovi_nan(avg_scores_min[i]))
+        avg_scores_max_cut.append(rimuovi_nan(avg_scores_max[i]))
+        lower_error_avg_cut.append(rimuovi_nan(lower_error_avg[i]))
+        upper_error_avg_cut.append(rimuovi_nan(upper_error_avg[i]))
+
+        best_scores_mean_cut.append(rimuovi_nan(best_scores_mean[i]))
+        best_scores_min_cut.append(rimuovi_nan(best_scores_min[i]))
+        best_scores_max_cut.append(rimuovi_nan(best_scores_max[i]))
+        lower_error_best_cut.append(rimuovi_nan(lower_error_best[i]))
+        upper_error_best_cut.append(rimuovi_nan(upper_error_best[i]))
+
+        print(len(avg_scores_mean_cut[i]), len(lower_error_avg_cut[i]), len(upper_error_avg_cut[i]))
+
+    fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(24,12))
+    colors = cm.rainbow(np.linspace(0, 1, len(avg_scores_mean)))
+
+    for i in range(len(avg_scores_mean_cut)):
+        x = list(range(sum(map(len, avg_scores_mean_cut[:i])), sum(map(len, avg_scores_mean_cut[:i+1]))))
+        axes[0].errorbar(x, avg_scores_mean_cut[i], yerr=[lower_error_avg_cut[i], upper_error_avg_cut[i]], label=f'Density {round((0.8 ** i) * 100, 1)}%', color=colors[i], alpha=0.7)
+        #print("MEDIA AVERAGE SCORES [" + str(i) + "]:")
+        #print(avg_scores_mean_cut[i])
+    
+    axes[0].axhline(y=-450, linestyle='--', color='black', label='Successful score')
+    axes[0].set_xlabel('Numero di generazioni')
+    axes[0].set_ylabel('Punteggio medio')
+    axes[0].set_title('Average scores')
+
+    for i in range(len(best_scores_mean_cut)):
+        x = list(range(sum(map(len, best_scores_mean_cut[:i])), sum(map(len, best_scores_mean_cut[:i+1]))))
+        axes[1].errorbar(x, best_scores_mean_cut[i], yerr=[lower_error_best_cut[i], upper_error_best_cut[i]], label=f'Density {round((0.8 ** i) * 100, 1)}%', color=colors[i], alpha=0.7)
+        #print("MEDIA BEST SCORES [" + str(i) + "]:")
+        #print(best_scores_mean_cut[i])
+
+    axes[1].axhline(y=-450, linestyle='--', color='black', label='Successful score')
+    axes[1].set_xlabel('Numero di generazioni')
+    axes[1].set_ylabel('Punteggio migliore')
+    axes[1].set_title('Best guy scores')
+
+    # Includi le legende e regola gli spazi
+    for ax in axes:
+        ax.legend(loc='center left', bbox_to_anchor=(1, 0.5), ncol=1)
+    plt.subplots_adjust(right=0.82)
+
+    plt.savefig(f'./' + output_file_name)'''
+
+
+# VERSIONE CON LINEA MASSIMO E MINIMO
+'''def plot_average_fitnesses(files, output_file_name):
+    all_avg_scores = []
+    all_best_scores = []
+
+    for file in files:
+        average_scores, best_scores = leggi_dati_da_file(file)
+        all_avg_scores.append(average_scores)
+        all_best_scores.append(best_scores)
+
+    # Calcola la media, il valore minimo e il valore massimo per i dati
+    avg_scores_mean = np.mean(all_avg_scores, axis=0)
+    avg_scores_min = np.min(all_avg_scores, axis=0)
+    avg_scores_max = np.max(all_avg_scores, axis=0)
+
+    best_scores_mean = np.mean(all_best_scores, axis=0)
+    best_scores_min = np.min(all_best_scores, axis=0)
+    best_scores_max = np.max(all_best_scores, axis=0)
+
+    fig, axes = plt.subplots(nrows=2, ncols=1, figsize=(24, 12))
+    colors = cm.rainbow(np.linspace(0, 1, len(files)))
+
+    # Tracciamento per i punteggi medi
+    x_start = 0
+    for i in range(len(files)):
+        avg_scores_mean_cut = [val for val in avg_scores_mean[i] if not np.isnan(val)]
+        avg_scores_min_cut = [val for val in avg_scores_min[i] if not np.isnan(val)]
+        avg_scores_max_cut = [val for val in avg_scores_max[i] if not np.isnan(val)]
+
+        x = np.arange(x_start, x_start + len(avg_scores_mean_cut))
+        axes[0].plot(x, avg_scores_mean_cut, label=f'Mean Scores - Density {round((0.8 ** i) * 100, 1)}%', color=colors[i], linewidth=2)
+        axes[0].plot(x, avg_scores_min_cut, label=f'Minimum Scores - Density {round((0.8 ** i) * 100, 1)}%', color=colors[i], linewidth=1, alpha=0.7)
+        axes[0].plot(x, avg_scores_max_cut, label=f'Maximum Scores - Density {round((0.8 ** i) * 100, 1)}%', color=colors[i], linewidth=1, alpha=0.7)
+        x_start += len(avg_scores_mean_cut)
+
+    axes[0].axhline(y=-475, linestyle='--', color='black', label='Success Score')
+    axes[0].set_xlabel('# of Generations')
+    axes[0].set_ylabel('Scores Mean')
+    axes[0].set_title('Average scores')
+
+    # Tracciamento per i migliori punteggi
+    x_start = 0
+    for i in range(len(files)):
+        best_scores_mean_cut = [val for val in best_scores_mean[i] if not np.isnan(val)]
+        best_scores_min_cut = [val for val in best_scores_min[i] if not np.isnan(val)]
+        best_scores_max_cut = [val for val in best_scores_max[i] if not np.isnan(val)]
+
+        x = np.arange(x_start, x_start + len(best_scores_mean_cut))
+        axes[1].plot(x, best_scores_mean_cut, label=f'Mean Scores - Density {round((0.8 ** i) * 100, 1)}%', color=colors[i], linewidth=2)
+        axes[1].plot(x, best_scores_min_cut, label=f'Minimum Scores - Density {round((0.8 ** i) * 100, 1)}%', color=colors[i], linewidth=1, alpha=0.7)
+        axes[1].plot(x, best_scores_max_cut, label=f'Maximum Scores - Density {round((0.8 ** i) * 100, 1)}%', color=colors[i], linewidth=1, alpha=0.7)
+        x_start += len(best_scores_mean_cut)
+
+    axes[1].axhline(y=-475, linestyle='--', color='black', label='Success Score')
+    axes[1].set_xlabel('# of Generations')
+    axes[1].set_ylabel('Scores Mean')
+    axes[1].set_title('Average scores')
+
+    # Includi le legende e regola gli spazi
+    for ax in axes:
+        ax.legend(loc='center left', bbox_to_anchor=(1, 0.5), ncol=1)
+    plt.subplots_adjust(right=0.82)
+
+    plt.savefig(f'./' + output_file_name)'''
+
+
+def cart_pole_NN():
     
     for tests in range(5): # esegue 5 test ed effettua il grafico con medie e error bars
 
         print("TEST " + str(tests) + " CART POLE NN")
     
         args = {}
-        fka = NN([4, 5, 2], 20)
+        fka = NN([4, 10, 10, 2], 20)
         rng = np.random.default_rng()
 
         args["num_vars"] = fka.nweights
@@ -265,11 +423,13 @@ def cart_pole_NN(baseFolder):
         best_guy = es.best.x
         best_fitness = es.best.f
 
-        save_scores(average_scores_history, best_scores_history, tests, baseFolder+"/cart_pole_NN_")
+        save_scores(average_scores_history, best_scores_history, tests, "cart_pole_NN_")
 
-        with open("./"+baseFolder+"/nn_test_cartpole_"+str(best_fitness)+".pkl", "wb") as f:
+        with open("./nn_test_cartpole_"+str(best_fitness)+".pkl", "wb") as f:
             pickle.dump(best_guy, f)
     
-    plot_average_fitnesses([baseFolder+'/cart_pole_NN_scores_run_0.txt', baseFolder+'/cart_pole_NN_scores_run_1.txt',
-                            baseFolder+'/cart_pole_NN_scores_run_2.txt', baseFolder+'/cart_pole_NN_scores_run_3.txt',
-                            baseFolder+'/cart_pole_NN_scores_run_4.txt'], baseFolder+"/CartPole_NN.png")
+    plot_average_fitnesses(['cart_pole_NN_scores_run_0.txt', 'cart_pole_NN_scores_run_1.txt', 'cart_pole_NN_scores_run_2.txt', 'cart_pole_NN_scores_run_3.txt', 'cart_pole_NN_scores_run_4.txt'], "CartPole_NN.png")
+
+    
+if __name__ == "__main__":
+    plot_average_fitnesses(['cart_pole_NN_scores_run_0.txt', 'cart_pole_NN_scores_run_1.txt', 'cart_pole_NN_scores_run_2.txt', 'cart_pole_NN_scores_run_3.txt', 'cart_pole_NN_scores_run_4.txt'], "CartPole_NN.png")
