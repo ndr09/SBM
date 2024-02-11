@@ -461,7 +461,7 @@ def cart_pole_SNN_phasecode():
                 es.tell(candidates, fitnesses)
 
                 best_guy = es.best.x
-                best = SNN([8, 4, 4, 2], 20)
+                best = SNN([8, 10, 10, 10, 2], 20)
                 best.set_params(best_guy)
                 with open("thresholds-biases.txt", "a") as file:
                     file.write("GEN " + str(gen+1) + "\n")

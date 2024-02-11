@@ -14,7 +14,7 @@ import math
 def eval(x, render=False):
     cumulative_rewards = []
     task = gym.make("CartPole-v1")
-    agent = NN([4, 8, 8, 8, 2], 20)
+    agent = NN([4, 10, 10, 2], 20)
     agent.set_weights(x)
     for i in range(100):
         cumulative_rewards.append(0)
