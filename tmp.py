@@ -231,6 +231,7 @@ class NHNN(NN):
                         dw[o, i] = 0.5 * (
                                     self.e[c][i].forward(torch.ones(1, dtype=torch.float)) + self.e[c + 1][o].forward(
                                 torch.ones(1, dtype=torch.float))) * (ai + bj + cij + dij)
+                self.dws[c] = dw
             # print(x0.size(), dw.size())
 
             dw1 = torch.matmul(dw,x0)
@@ -301,8 +302,10 @@ class NHNN(NN):
         start += self.nodes[-1]
 
     def set_weights_layer(self, weights, i):
+        tmp = weights.clone().detach()
+        tmp /= torch.max(torch.abs(tmp)) if not torch.all(torch.max(torch.abs(tmp))==0.)  else 1.
 
-        self.networks[i].weight.data = weights.clone().detach()
+        self.networks[i].weight.data = tmp
 
     def update_weights_layer(self, i, activations_i, activations_i1):
         weights = self.get_weights()
@@ -355,23 +358,21 @@ def tr(model, lsfn, opti, it):
     # print(y.shape)
 
     loss = lsfn(yh, y)
-    print(it," ",loss)
+    print(it," ",loss, yh.flatten())
 
     loss.backward(retain_graph=True )
     # print("---------------------")
-    # for l in model.a:
-    #     for h in l:
-    #         print("pre ", h.l.grad, h.l)
+    # for l in model.networks:
+    #     print(l.weight.data)
     opti.step()
     opti.zero_grad()
-    # for l in model.a:
-    #     for h in l:
-    #         print("post ", h.l.grad,  h.l)
+    # for l in model.networks:
+    #     print(l.weight.data)
 
 
 if __name__ == "__main__":
     loss_fn = torch.nn.MSELoss()
-    lr = 0.0001
+    lr = 0.00001
     model = NHNN([1, 2, 1], init='zero')
     # model.set_hrules2([1. for i in range(model.nparams.item())])
     # model.reset_weights()
@@ -382,7 +383,7 @@ if __name__ == "__main__":
     #     print(p)
 
     # print("/////////////////////////////////////////////")
-    optimizer = torch.optim.SGD(model.params, lr=lr, weight_decay=0.0001)
+    optimizer = torch.optim.SGD(model.params, lr=lr)
 
     for i in range(1000):
         tr(model, loss_fn, optimizer, i)
