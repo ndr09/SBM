@@ -267,7 +267,7 @@ class ESE():
         elites = [(fits[i], pop[i]) for i in range(self.npop)]
         self.fitness = fits
         elites.sort(reverse=True, key=lambda t: t[0])
-        
+
         if self.elite is None or elites[0][0] > self.elite[0]:
             self.elite = elites[0]
         self.parents = np.array([t[1] for t in elites[:self.npop // 4]])

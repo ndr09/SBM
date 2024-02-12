@@ -1,24 +1,17 @@
 import sys
 import os
-import time
 
 from optimizer import *
-import  gym
+import gymnasium as gym
 import numpy as np
 import functools
 from random import Random
-from multiprocessing import Pool
 import pickle
 
 from network5 import numWLNHNN
 import json
 
-gym.logger.set_level(40)
-import contextlib
-from PIL import Image
-with contextlib.redirect_stdout(None):
-    import pybullet_envs
-from numba.typed import List
+
 def eval(data, render=False):
     import ctypes
     import sys
@@ -30,8 +23,8 @@ def eval(data, render=False):
     cumulative_rewards = []
     task = None
 
-    task = gym.make("AntBulletEnv-v0")
-    nodes = List()
+    task = gym.make("ant-v4")
+    nodes = []
     nodes.append(28)
     nodes.append(128)
     nodes.append(64)
@@ -42,14 +35,6 @@ def eval(data, render=False):
     agent.set_hrules(x)
     obs = task.reset()
     start = time.time()
-    #action = np.ones(8)
-    #
-    # for i in range(40):
-    #     _,_,done,_ = task.step(action)
-    #     a = task.render(mode="rgb_array")
-    #     print(i, done)
-    #     im = Image.fromarray(a)
-    #     im.save("img/"+str(i)+".jpeg")
     cumulative_rewards.append(0)
     done = False
     # exit(1)
