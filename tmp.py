@@ -146,7 +146,7 @@ class HP(nn.Module):
 class NP(nn.Module):
     def __init__(self):
         super().__init__()
-        self.l = nn.Parameter(torch.zeros(1))
+        self.l = torch.zeros(1)
 
     def forward(self, inputs):
         return self.l * inputs
@@ -260,6 +260,11 @@ class NHNN(NN):
         self.activations = tmp[:]
         return x1
 
+    def forward_nu(self,inputs):
+        x = torch.tanh(inputs)
+        for l in self.networks[:-1]:
+            x = torch.tanh(l(x))
+        return self.networks[-1](x)
 
     def reset_weights(self, init="maintain"):
         for l in self.networks:
@@ -375,21 +380,32 @@ class NHNN(NN):
 
 
 
-def tr(model, lsfn, opti, it):
-    model.reset_weights('maintain')
-    s = 10
-    inputs = torch.tensor([[float(i)] for i in range(1,s+1)], dtype=torch.float)
+def tr(model, lsfn, opti, it, inp):
+    model.reset_weights('uni')
+    s =10
+    idx = torch.randperm(inp.nelement())
+    inputs = inp.view(-1)[idx].view(inp.size())
+    #torch.tensor([[float(i)] for i in range(1,s+1)], dtype=torch.float)
     y = inputs*2#torch.tensor([[float(i) ** 2] for i in range(10)], dtype=torch.float)
     torch.autograd.set_detect_anomaly(True)
     model.train()
     yh = torch.zeros((s, 1))
     yt = torch.zeros((s, 1))
+    yt1 = torch.zeros((s, 1))
 
     for i in range(s):
         a = model.forward(torch.tensor([inputs[i, 0]]))
         # print(a)
         yh[i, 0] = a
         # yh = model.forward(inputs)
+
+    with torch.no_grad():
+        model.reset_weights('maintain')
+
+        for i in range(s):
+            a = model.forward_nu(torch.tensor([inputs[i, 0]]))
+            yt1[i, 0] = a
+
     with torch.no_grad():
         model.reset_weights('uni')
 
@@ -397,15 +413,21 @@ def tr(model, lsfn, opti, it):
             a = model.forward(torch.tensor([inputs[i, 0]]))
             yt[i, 0] = a
 
+
     # print(yh.shape)
     # print(y.shape)
     print("---------------------")
     # for l in model.networks:
     #     print(l.weight.data)
     loss = lsfn(yh, y)
+
     print(it," ",loss)
-    print(yh.flatten())
-    print(yt.flatten())
+    print("out",torch.clone(yh.flatten()).detach().numpy())
+    print("nup",torch.clone(yt1.flatten()).detach().numpy())
+    print("res",torch.clone(yt.flatten()).detach().numpy())
+
+    # print(yt.flatten())
+    # print(yt1.flatten())
 
     print(y.flatten())
 
@@ -421,20 +443,22 @@ def tr(model, lsfn, opti, it):
 
 if __name__ == "__main__":
     loss_fn = torch.nn.MSELoss()
-    lr = 0.00001
-    model = NHNN([1, 2,2, 1], init='uni')
+    np.set_printoptions(precision=5,suppress=True)
+    lr = 0.1
+    model = NHNN([1, 2, 1], init='uni')
     # model.set_hrules2([1. for i in range(model.nparams.item())])
     # model.reset_weights()
     model = model.to(torch.float)
     model.reset_weights()
 
-    print(" PARAMS ")
-    print(list(model.params))
-    for p in model.params:
-        print(p)
+    # print(" PARAMS ")
+    # print(list(model.params))
+    # for p in model.params:
+    #     print(p)
 
     # print("/////////////////////////////////////////////")
     optimizer = torch.optim.SGD(model.params, lr=lr)
-
+    s = 10
+    inputs = torch.rand((s, 1))
     for i in range(100):
-        tr(model, loss_fn, optimizer, i)
+        tr(model, loss_fn, optimizer, i, inputs)
