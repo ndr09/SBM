@@ -3,6 +3,8 @@ import torch
 import torch.nn as nn
 import time
 from scipy.stats import kstest
+import gymnasium as gym
+
 
 
 class NN(nn.Module):
@@ -180,7 +182,7 @@ class NHNN(NN):
         # self.hrules = torch.nn.ParameterList(self.hrules)
         self.params = []
         for l in range(len(self.nodes)):
-            print(l,self.nodes,self.a[l])
+            #print(l,self.nodes,self.a[l])
             for i in range(self.nodes[l]):
                     self.params.extend(list(self.a[l][i].parameters()))
                     self.params.extend(list(self.b[l][i].parameters()))
@@ -208,8 +210,7 @@ class NHNN(NN):
         tmp.append(torch.reshape(torch.clone(x0),(x0.size()[0],1)))
         # print(x)
         c = 0
-        for i in range(len(self.networks)):
-            self.set_weights_layer(self.networks[i].weight.data+self.dws[i],i)
+
 
         for l in self.networks:
             ih = self.nodes[c]
@@ -223,34 +224,63 @@ class NHNN(NN):
                         # print("##################################",self.activations[c][i],self.a[c][i].l.weight,ai)
 
                         bj = self.b[c + 1][o].forward(self.activations[c + 1][o])
+
                         cij = self.c[c][i].forward(self.activations[c][i]) * self.c[c + 1][o].forward(
                             self.activations[c + 1][o])
                         dij = self.d[c][i].forward(torch.ones(1, dtype=torch.float)) * self.d[c + 1][o].forward(
                             torch.ones(1, dtype=torch.float))
-                        # print(dw.size(), i,o)
-                        dw[o, i] = 0.5 * (
-                                    self.e[c][i].forward(torch.ones(1, dtype=torch.float)) + self.e[c + 1][o].forward(
-                                torch.ones(1, dtype=torch.float))) * (ai + bj + cij + dij)
+
+                        eta  =  0.5 * (self.e[c][i].forward(torch.ones(1, dtype=torch.float)) + self.e[c + 1][o].forward(
+                                torch.ones(1, dtype=torch.float)))
+                        # print(eta, ai,bj,cij,dij)
+                        dw[o, i] = eta * (ai + bj + cij + dij)
+                        #print(eta, ai,bj,cij,dij, dw[o, i])
+
                 self.dws[c] = dw
             # print(x0.size(), dw.size())
 
             dw1 = torch.matmul(dw,x0)
             # print(x0.size(), dw.size(), dw1)
             # print("=======")
-            x1 = l(x0) + dw1
+            a = l(x0)
+            x1 = a + dw1
             if not c == len(self.networks)-1:
                 x1 = torch.tanh(x1)
 
+            tmp.append(torch.reshape(torch.clone(x1), (x1.size()[0], 1)))
+            #     tmp.append(torch.reshape(torch.clone(x1), (x1.size()[0], 1)))
+            # else:
+            #     tmp.append(torch.reshape(torch.tanh(torch.clone(x1)), (x1.size()[0], 1)))
+
             # print('aa',x1.size(),l(x0).size(),dw1.size())
-            tmp.append(torch.reshape(torch.clone(x1),(x1.size()[0],1)))
             x0 = x1
             c += 1
+        for i in range(len(self.networks)):
+            self.set_weights_layer(self.dws[i],i)
         self.activations = tmp[:]
-        return self.activations[-1]
+        return x1
 
-    def reset_weights(self):
+
+    def reset_weights(self, init="maintain"):
         for l in self.networks:
-            torch.nn.init.zeros_(l.weight.data)
+            if init == 'xa_uni':
+                torch.nn.init.xavier_uniform(l.weight.data, 0.3)
+            elif init == 'sparse':
+                torch.nn.init.sparse_(l.weight.data, 0.8)
+            elif init == 'uni':
+                torch.nn.init.uniform_(l.weight.data, -0.1, 0.1)
+            elif init == 'normal':
+                torch.nn.init.normal_(l.weight.data, 0, 0.024)
+            elif init == 'ka_uni':
+                torch.nn.init.kaiming_uniform_(l.weight.data, 3)
+            elif init == 'uni_big':
+                torch.nn.init.uniform_(l.weight.data, -1, 1)
+            elif init == 'xa_uni_big':
+                torch.nn.init.xavier_uniform(l.weight.data)
+            elif init == 'zero':
+                torch.nn.init.zeros_(l.weight.data)
+            elif type=='maintain':
+                    l.weight.data = torch.clone(l.weight.data)
         self.activations = []
 
     def set_hrules(self):
@@ -303,7 +333,16 @@ class NHNN(NN):
 
     def set_weights_layer(self, weights, i):
         tmp = weights.clone().detach()
-        tmp /= torch.max(torch.abs(tmp)) if not torch.all(torch.max(torch.abs(tmp))==0.)  else 1.
+        #print("========",i,"========")
+        wold = self.networks[i].weight.data
+        #print("wold ",wold)
+        #print("tmp ", weights)
+        tmp += wold
+        reg = torch.max(torch.abs(tmp))
+        #print("\t reg",reg, tmp)
+        tmp /= reg if not reg==0.  else 1.
+        #print(tmp)
+        #print("================")
 
         self.networks[i].weight.data = tmp
 
@@ -316,12 +355,6 @@ class NHNN(NN):
         pre_i = pre_i.repeat((activations_i1.size()[0], 1))
 
         post_j = self.b[i + 1] * activations_i1
-        #
-        # print("B", self.b[i + 1])
-        # print("a_i1", activations_i1)
-        # print("B*b_j", post_j)
-        # print("bb ", self.b[i + 1] * activations_i1)
-        # print("B", self.b[i + 1])
 
         post_j = torch.reshape(post_j, (activations_i1.size()[0], 1))
 
@@ -341,49 +374,67 @@ class NHNN(NN):
         self.set_weights_layer(nl, i)
 
 
+
 def tr(model, lsfn, opti, it):
-    model.reset_weights()
-    inputs = torch.tensor([[float(i)] for i in range(10)], dtype=torch.float)
-    y = torch.tensor([[float(i) ** 2] for i in range(10)], dtype=torch.float)
+    model.reset_weights('maintain')
+    s = 10
+    inputs = torch.tensor([[float(i)] for i in range(1,s+1)], dtype=torch.float)
+    y = inputs*2#torch.tensor([[float(i) ** 2] for i in range(10)], dtype=torch.float)
     torch.autograd.set_detect_anomaly(True)
     model.train()
-    yh = torch.zeros((10, 1))
-    for i in range(10):
+    yh = torch.zeros((s, 1))
+    yt = torch.zeros((s, 1))
+
+    for i in range(s):
         a = model.forward(torch.tensor([inputs[i, 0]]))
         # print(a)
         yh[i, 0] = a
         # yh = model.forward(inputs)
+    with torch.no_grad():
+        model.reset_weights('uni')
+
+        for i in range(s):
+            a = model.forward(torch.tensor([inputs[i, 0]]))
+            yt[i, 0] = a
 
     # print(yh.shape)
     # print(y.shape)
-
+    print("---------------------")
+    # for l in model.networks:
+    #     print(l.weight.data)
     loss = lsfn(yh, y)
-    print(it," ",loss, yh.flatten())
+    print(it," ",loss)
+    print(yh.flatten())
+    print(yt.flatten())
+
+    print(y.flatten())
 
     loss.backward(retain_graph=True )
-    # print("---------------------")
-    # for l in model.networks:
-    #     print(l.weight.data)
+    # for r in model.a:
+    #     print('pre',r[0].l,r[0].l.grad)
     opti.step()
     opti.zero_grad()
+    # for r in model.a:
+    #     print('post',r[0].l,r[0].l.grad)
     # for l in model.networks:
     #     print(l.weight.data)
-
 
 if __name__ == "__main__":
     loss_fn = torch.nn.MSELoss()
     lr = 0.00001
-    model = NHNN([1, 2, 1], init='zero')
+    model = NHNN([1, 2,2, 1], init='uni')
     # model.set_hrules2([1. for i in range(model.nparams.item())])
     # model.reset_weights()
     model = model.to(torch.float)
-    # print(" PARAMS ")
-    # print(list(model.params))
-    # for p in model.params:
-    #     print(p)
+    model.reset_weights()
+
+    print(" PARAMS ")
+    print(list(model.params))
+    for p in model.params:
+        print(p)
 
     # print("/////////////////////////////////////////////")
     optimizer = torch.optim.SGD(model.params, lr=lr)
 
-    for i in range(1000):
+    for i in range(100):
         tr(model, loss_fn, optimizer, i)
