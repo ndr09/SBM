@@ -284,7 +284,7 @@ class NHNN(NN):
                 torch.nn.init.xavier_uniform(l.weight.data)
             elif init == 'zero':
                 torch.nn.init.zeros_(l.weight.data)
-            elif type=='maintain':
+            elif init=='maintain':
                     l.weight.data = torch.clone(l.weight.data)
         self.activations = []
 
@@ -420,7 +420,8 @@ def tr(model, lsfn, opti, it, inp):
     # for l in model.networks:
     #     print(l.weight.data)
     loss = lsfn(yh, y)
-
+    with open("loss.txt", "a") as f:
+        f.write(str(loss.item())+"\n")
     print(it," ",loss)
     print("out",torch.clone(yh.flatten()).detach().numpy())
     print("nup",torch.clone(yt1.flatten()).detach().numpy())
@@ -455,9 +456,11 @@ if __name__ == "__main__":
     # print(list(model.params))
     # for p in model.params:
     #     print(p)
+    with open("loss.txt", "w") as f:
+        pass
 
     # print("/////////////////////////////////////////////")
-    optimizer = torch.optim.SGD(model.params, lr=lr)
+    optimizer = torch.optim.SGD(model.params, lr=lr, weight_decay=0.00001)
     s = 10
     inputs = torch.rand((s, 1))
     for i in range(100):
