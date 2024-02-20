@@ -694,11 +694,11 @@ class SBM(HNN):
         self.nodes = nodes[:]
         self.tns = sum(self.nodes)
         self.prune_ratio = prune_ratio
-        self.eta = eta
         self.nweights = nodes[0] * nodes[-1] + nodes[0] * nodes[1] + (nodes[1] ** 2 - nodes[1]) + nodes[1] * nodes[2]
+        self.nparams = self.nweights*5
 
         self.weights = np.zeros((self.tns, self.tns), dtype=float)
-        self.hrules = np.array((self.tns, self.tns, 4), dtype=float)
+        self.hrules = np.array((self.tns, self.tns, 5), dtype=float)
         self.activations = np.zeros(self.tns)
         self.prune_flag = False
         self.pruned_synapses = set()
@@ -735,8 +735,8 @@ class SBM(HNN):
                     c += 1
 
     def set_hrules(self, hrules):
-        assert len(hrules) == self.nweights * 4
-        self.hrules = np.zeros((self.tns, self.tns, 4))
+        assert len(hrules) == self.nweights * 5
+        self.hrules = np.zeros((self.tns, self.tns, 5))
         # print("############# "+str(len(hrules)))
         c = 0
         # set input to other nodes rules
@@ -746,7 +746,8 @@ class SBM(HNN):
                 self.hrules[i, o, 1] = hrules[c + 1]
                 self.hrules[i, o, 2] = hrules[c + 2]
                 self.hrules[i, o, 3] = hrules[c + 3]
-                c += 4
+                self.hrules[i, o, 4] = hrules[c + 4]
+                c += 5
         # set Hidden to Hidden nodes rules
         for i in range(self.nodes[0], self.nodes[0] + self.nodes[1]):
             for o in range(self.nodes[0], self.nodes[0] + self.nodes[1]):
@@ -755,7 +756,8 @@ class SBM(HNN):
                     self.hrules[i, o, 1] = hrules[c + 1]
                     self.hrules[i, o, 2] = hrules[c + 2]
                     self.hrules[i, o, 3] = hrules[c + 3]
-                    c += 4
+                    self.hrules[i, o, 4] = hrules[c + 4]
+                    c += 5
         # set H to output nodes rules
         for i in range(self.nodes[0], self.nodes[0] + self.nodes[1]):
             for o in range(self.nodes[0] + self.nodes[1], self.tns):
@@ -764,7 +766,8 @@ class SBM(HNN):
                     self.hrules[i, o, 1] = hrules[c + 1]
                     self.hrules[i, o, 2] = hrules[c + 2]
                     self.hrules[i, o, 3] = hrules[c + 3]
-                    c += 4
+                    self.hrules[i, o, 4] = hrules[c + 4]
+                    c += 5
 
     def sanitize_weights(self):
         # clean impossible connections
@@ -865,7 +868,7 @@ class SBM(HNN):
                 if i == o or (i, o) in self.pruned_synapses:
                     self.weights[i, o] = 0.
                 else:
-                    self.weights[i, o] = self.weights[i, o] + self.eta * (
+                    self.weights[i, o] = self.weights[i, o] + self.hrules[i, o, 4] * (
                             self.hrules[i, o, 0] * self.activations[i] +
                             self.hrules[i, o, 1] * self.activations[o] +
                             self.hrules[i, o, 2] * self.activations[i] * self.activations[o] +
@@ -876,7 +879,7 @@ class SBM(HNN):
                 if i == o or (i, o) in self.pruned_synapses:
                     self.weights[i, o] = 0.
                 else:
-                    self.weights[i, o] = self.weights[i, o] + self.eta * (
+                    self.weights[i, o] = self.weights[i, o] + self.hrules[i, o, 4] * (
                             self.hrules[i, o, 0] * self.activations[i] +
                             self.hrules[i, o, 1] * self.activations[o] +
                             self.hrules[i, o, 2] * self.activations[i] * self.activations[o] +
@@ -886,7 +889,7 @@ class SBM(HNN):
                 if i == o or (i, o) in self.pruned_synapses:
                     self.weights[i, o] = 0.
                 else:
-                    self.weights[i, o] = self.weights[i, o] + self.eta * (
+                    self.weights[i, o] = self.weights[i, o] + self.hrules[i, o, 4] * (
                             self.hrules[i, o, 0] * self.activations[i] +
                             self.hrules[i, o, 1] * self.activations[o] +
                             self.hrules[i, o, 2] * self.activations[i] * self.activations[o] +
@@ -1214,46 +1217,6 @@ class D_SBM(HNN):
         self.weights = np.triu(self.weights)
         self.weights = self.weights + self.weights.T - np.diag(np.diag(self.weights))
 
-    def activate(self, inputs):
-        if not self.prune_flag:
-            for i in range(len(inputs)):
-                self.activations[i] = np.tanh(inputs[i])
-            actv = list(range(self.nodes[0], self.tns - self.nodes[-1]))
-            if self.random:
-                self.rng.shuffle(actv)
-            for i in actv:
-                self.activations[i] = np.tanh(np.dot(self.activations, self.weights[:, i]))
-            for i in range(self.nodes[0] + self.nodes[1], self.tns):  # fires output
-                self.activations[i] = np.tanh(np.dot(self.activations, self.weights[:, i]))
-        else:
-            # neurons can appear more than one time in the cycle history, as a node can be in more than one cycle.
-            # However, if it fired it don't have to fire again
-            fired_neurons = set()
-            for n in self.top_sort:  # top sort contains both input and outputs
-                if n < self.tns and not n in fired_neurons:  # it is a true node
-                    if n >= self.nodes[0]:  # is not an input
-                        self.activations[n] = np.tanh(np.dot(self.activations, self.weights[:, n]))
-                        fired_neurons.add(n)
-                    else:  # n is an input
-                        self.activations[n] = np.tanh(inputs[n])
-                        fired_neurons.add(n)
-                else:  # n is a fake node, it contains a cycle, check the history
-                    fns = [n]
-                    while len(fns) > 0:
-                        fn = fns.pop(0)
-                        for l in range(len(self.cycle_history)):
-                            if fn in self.cycle_history[l].keys():
-                                cns = self.cycle_history[l][fn]
-                                self.rng.shuffle(cns)
-                                for cn in cns:
-                                    if cn >= self.tns:  # cn is a fake node
-                                        fns.append(cn)
-                                    else:  # cn is a true node, already shuffled, so it fires
-                                        if not n in fired_neurons:  # it fires only if it has not yet fired
-                                            self.activations[cn] = np.tanh(
-                                                np.dot(self.activations, self.weights[:, cn]))
-        return self.activations[self.nodes[0] + self.nodes[1]:self.tns]
-
     def get_weightsToPrune(self):
         ws = []
         for i in range(self.nodes[0]):
@@ -1368,8 +1331,10 @@ class D_SBM(HNN):
                     clean = pos
         return nw, ni, clean
 
-    def distance_activation(self, inputs):
+    def activate(self, inputs):
         # all inputs fires together, find the next nodes
+        for i in range(len(inputs)):
+            self.activations[i] = np.tanh(inputs[i])
         if self.first_rodeo:
             fire_order = list(range(self.nodes[0], self.tns))
             np.random.shuffle(fire_order)
@@ -1382,8 +1347,7 @@ class D_SBM(HNN):
                 ###### LOOK UP !!!!!!
             self.first_rodeo = False
         else:
-            for i in range(len(inputs)):
-                self.activations[i] = np.tanh(inputs[i])
+
             fire_order_dis = []
             fire_order_ind = []
             self._fired.clear()
@@ -1655,6 +1619,8 @@ class ND_SBM(HNN):
 
     def activate(self, inputs, update=True):
         # all inputs fires together, find the next nodes
+        for i in range(len(inputs)):
+            self.activations[i] = np.tanh(inputs[i])
         if self.first_rodeo:
             fire_order = list(range(self.nodes[0], self.tns))
             np.random.shuffle(fire_order)
@@ -1667,8 +1633,6 @@ class ND_SBM(HNN):
                 ###### LOOK UP !!!!!!
             self.first_rodeo = False
         else:
-            for i in range(len(inputs)):
-                self.activations[i] = np.tanh(inputs[i])
             fire_order_dis = []
             fire_order_ind = []
             self._fired.clear()
@@ -1753,21 +1717,22 @@ class ND_SBM(HNN):
 class NDEP_SBM(ND_SBM):
     def __init__(self, nodes, prune_ratio=0, seed=None, random=True):
         super().__init__(nodes, prune_ratio, seed, random)
-        self.prune_ratio = np.zeros((self.tns,2))
+        self.prune_ratio = np.zeros((self.tns,2)) # pr 0 ps 1
         self.prune_flag = set()
+        self.nparams += sum(self.nodes[1:])*2
         self.act_counter = 0
 
     def set_prune_rules(self, params):
         c = 0
-        for i in range(self.tns):
-            self.prune_ratio[i,0] =params[c] #how much
-            self.prune_ratio[i,1] =params[c+1] #when
+        for i in range(sum(self.nodes[1:])):
+            self.prune_ratio[i,0] = params[c] #how much
+            self.prune_ratio[i,1] = int(params[c+1]) #when
             c+=2
 
     def prune_weights_node(self, node):
         wsToThr = np.abs(self.weights[:, node])
-        thr = np.percentile(wsToThr, self.prune_ratio[0])
-        self.pruned_flag.add(node)
+        thr = np.percentile(wsToThr, self.prune_ratio[node][0])
+        self.prune_flag.add(node)
         for i in range(wsToThr):
             if wsToThr[i] <= thr:
                 self.weights[i, node] = 0.
@@ -1777,6 +1742,8 @@ class NDEP_SBM(ND_SBM):
     def activate(self, inputs, update=True):
         # all inputs fires together, find the next nodes
         self.act_counter+=1
+        for i in range(len(inputs)):
+            self.activations[i] = np.tanh(inputs[i])
         if self.first_rodeo:
             fire_order = list(range(self.nodes[0], self.tns))
             np.random.shuffle(fire_order)
@@ -1784,14 +1751,14 @@ class NDEP_SBM(ND_SBM):
                 self._fired.add(node)
                 self.activations[node] = np.tanh(np.dot(self.activations, self.weights[:, node]))
                 ###### REMEMBER THIS!
-                if update:
+                if update and not node in self.prune_flag:
                     self.update_weights_node(node)
-
+                if self.prune_ratio[node][1] == self.act_counter:
+                    self.prune_weights_node(node)
                 ###### LOOK UP !!!!!!
             self.first_rodeo = False
         else:
-            for i in range(len(inputs)):
-                self.activations[i] = np.tanh(inputs[i])
+
             fire_order_dis = []
             fire_order_ind = []
             self._fired.clear()
@@ -1812,9 +1779,9 @@ class NDEP_SBM(ND_SBM):
                 self.activations[node] = np.tanh(np.dot(self.activations, self.weights[:, node]))
 
                 ###### REMEMBER THIS!
-                if update:
+                if update and not node in self.prune_flag:
                     self.update_weights_node(node)
-                if self.prune_ratio[1] == self.act_counter:
+                if self.prune_ratio[node][1] == self.act_counter:
                     self.prune_weights_node(node)
                 ###### LOOK UP !!!!!!
 

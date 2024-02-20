@@ -270,7 +270,7 @@ class ESE():
 
         if self.elite is None or elites[0][0] > self.elite[0]:
             self.elite = elites[0]
-        self.parents = np.array([t[1] for t in elites[:self.npop // 4]])
+        self.parents = np.array([t[1] for t in elites[:10]])
 
 
 class EvolutionStrategy(object):
