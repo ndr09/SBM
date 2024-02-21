@@ -86,7 +86,7 @@ def experiment_launcher(config):
     while gen <= args["generations"]:
         candidates = es.ask()  # get list of new solutions
         fitnesses = parallel_val(candidates, args)
-        log = "generation " + str(gen) + "  " + str(es.elite[0]) + "  " + str(max(fitnesses)) + "  " + str(
+        log = "generation " + str(gen) + "  " + str(es.elite[0] if es.elite is not None else None) + "  " + str(max(fitnesses)) + "  " + str(
             np.mean(fitnesses))
 
         print(log)
