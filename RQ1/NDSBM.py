@@ -134,7 +134,7 @@ if __name__ == "__main__":
                     taskinfo = {"MountainCar": [2, 3],
                                 "LunarLander": [8, 4]
                                 }
-                    args["nodes"] = [taskinfo[task][0], hnodes, taskinfo[task][0]]
+                    args["nodes"] = [taskinfo[task][0], hnodes, taskinfo[task][1]]
                     args["pr"] = pr
                     args['ps'] = ps
                     experiment_launcher(args)
