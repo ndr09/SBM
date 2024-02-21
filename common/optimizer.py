@@ -238,7 +238,7 @@ class CMAES():
         return self.pop[:]
 
 
-class ESE():
+class ES1():
     def __init__(self, seed, length, npop, sigma):
         self.seed = seed
         self.length = length

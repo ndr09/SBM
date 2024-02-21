@@ -688,7 +688,7 @@ class HNN4Rauto(NN):
         return hrules
 
 
-class SBM(HNN):
+class TSBM(HNN):
     def __init__(self, nodes, prune_ratio, eta, seed, random):
         super().__init__(nodes, eta)
         self.nodes = nodes[:]
