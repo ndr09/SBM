@@ -132,7 +132,7 @@ if __name__ == "__main__":
                                 "Hopper": [11, 3],
                                 "Pusher": [23, 7]
                                 }
-                    args["nodes"] = [taskinfo[task][0], hnodes, taskinfo[task][0]]
+                    args["nodes"] = [taskinfo[task][0], hnodes, taskinfo[task][1]]
 
                     experiment_launcher(args)
                     print("ended experiment " + str(args))
