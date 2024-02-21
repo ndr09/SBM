@@ -82,7 +82,10 @@ def experiment_launcher(config):
     while gen <= args["generations"]:
         candidates = es.ask()  # get list of new solutions
         fitnesses = parallel_val(candidates, args)
-        log = "generation " + str(gen) + "  " + str(max(fitnesses)) + "  " + str(np.mean(fitnesses))
+        log = "generation " + str(gen) + "  " + str(es.elite[0]) + "  " + str(max(fitnesses)) + "  " + str(
+            np.mean(fitnesses))
+
+
         print(log)
         with open(os.path.join(args["dir"], "best_" + str(gen) + ".pkl"), "wb") as f:
             pickle.dump(candidates[np.argmax(fitnesses)], f)
