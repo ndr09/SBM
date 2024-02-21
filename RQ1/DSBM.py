@@ -28,7 +28,7 @@ def eval(data):
     for i in range(100):
         while not (done or truncated):
             output = agent.activate(obs)
-            obs, rew, done, truncated, info = task.step(output)
+            obs, rew, done, truncated, info = task.step(np.argmax(output))
 
             rew_ep += rew
             if t == args['ps']:

@@ -31,7 +31,7 @@ def eval(data):
         uflag = True
         while not (done or truncated):
             output = agent.activate(obs, uflag)
-            obs, rew, done, truncated, info = task.step(output)
+            obs, rew, done, truncated, info = task.step(np.argmax(output))
             if t == args['ps']:
                 agent.prune_weights()
                 uflag = False
