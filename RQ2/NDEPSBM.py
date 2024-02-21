@@ -55,7 +55,7 @@ def generator_wrapper(func):
 
 
 def parallel_val(candidates, args):
-    with Pool(-1) as p:
+    with Pool() as p:
         return p.map(eval, [[c, json.loads(json.dumps(args))] for c in candidates])
     # res = [eval([c, json.loads(json.dumps(args))]) for c in candidates]
     # return res
@@ -72,7 +72,7 @@ def experiment_launcher(config):
     print("this problem has " + str(args["num_vars"]) + " parameters")
     args["seed"] = seed
 
-    es = ESE(seed, args["num_vars"], 100, 0.35)
+    es = ES1(seed, args["num_vars"], 100, 0.35)
 
     gen = 0
     logs = []

@@ -6,8 +6,10 @@ import numpy as np
 import functools
 import pickle
 from multiprocessing import Pool
-from SBM.common import TSBM
+from SBM.common import TSBM as SBM
 import json
+
+from SBM.common.optimizer import ES1
 
 
 def eval(data):
@@ -56,7 +58,7 @@ def generator_wrapper(func):
 
 
 def parallel_val(candidates, args):
-    with Pool(-1) as p:
+    with Pool() as p:
         return p.map(eval, [[c, json.loads(json.dumps(args))] for c in candidates])
     # res = [eval([c, json.loads(json.dumps(args))]) for c in candidates]
     # return res
@@ -73,7 +75,7 @@ def experiment_launcher(config):
     print("this problem has " + str(args["num_vars"]) + " parameters")
     args["seed"] = seed
 
-    es = ESE(seed, args["num_vars"], 100, 0.35)
+    es = ES1(seed, args["num_vars"], 100, 0.35)
 
     gen = 0
     logs = []
@@ -132,7 +134,8 @@ if __name__ == "__main__":
                                 "LunarLander": [8, 4]
                                 }
                     args["nodes"] = [taskinfo[task][0], hnodes, taskinfo[task][0]]
-
+                    args["pr"] = pr
+                    args['ps'] = ps
                     experiment_launcher(args)
                     print("ended experiment " + str(args))
 
