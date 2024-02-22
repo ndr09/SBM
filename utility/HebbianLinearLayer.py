@@ -45,7 +45,7 @@ class HebbianLinearLayer(nn.Module):
         self.reset(self.Bj, 'normal')
         self.reset(self.C, 'normal')
         self.reset(self.D, 'normal')
-        self.reset(self.eta, 'normal')
+        self.reset(self.eta, 'normal_small')
 
         self.device = device
         self.dtype = dtype
@@ -61,7 +61,7 @@ class HebbianLinearLayer(nn.Module):
             self.eta_last = nn.Parameter(torch.randn(out_features, requires_grad=True, **factory_kwargs))
             self.reset(self.C_last, 'normal')
             self.reset(self.D_last, 'normal')
-            self.reset(self.eta_last, 'normal')
+            self.reset(self.eta_last, 'normal_small')
 
     def reshape_input(self, input):
         if len(input.shape) == 1:
@@ -76,7 +76,6 @@ class HebbianLinearLayer(nn.Module):
 
         out = F.linear(input, self.weight, self.bias)
 
-        #if not self.last_layer:
         out = self.activation(out)
 
         self.update_weights(input, out)
@@ -85,7 +84,10 @@ class HebbianLinearLayer(nn.Module):
     def forward(self, input):
         input = self.reshape_input(input)
         out = F.linear(input, self.weight, self.bias)
-        out = self.activation(out)
+
+        if not self.last_layer:
+            out = self.activation(out)
+            
         return out
     
     def attach_hebbian_layer(self, layer):
@@ -165,7 +167,9 @@ class HebbianLinearLayer(nn.Module):
         elif init == 'uni':
             torch.nn.init.uniform_(parameter, -0.1, 0.1)
         elif init == 'normal':
-            torch.nn.init.normal_(parameter, 0, 0.024)
+            torch.nn.init.normal_(parameter, 0, 0.1)
+        elif init == 'normal_small':
+            torch.nn.init.normal_(parameter, 0, 0.01)
         elif init == 'ka_uni':
             torch.nn.init.kaiming_uniform_(parameter, 3)
         elif init == 'uni_big':
