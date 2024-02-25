@@ -11,7 +11,7 @@ class HebbianLinearLayer(nn.Module):
             self, 
             in_features: int, 
             out_features: int, 
-            bias: bool = True, 
+            bias: bool = False, 
             device="cpu", 
             activation=F.tanh,
             dtype=torch.float32,
@@ -45,7 +45,7 @@ class HebbianLinearLayer(nn.Module):
         self.reset(self.Bj, 'normal')
         self.reset(self.C, 'normal')
         self.reset(self.D, 'normal')
-        self.reset(self.eta, 'normal_small')
+        self.reset(self.eta, 'normal')
 
         self.device = device
         self.dtype = dtype
@@ -54,14 +54,13 @@ class HebbianLinearLayer(nn.Module):
         # this is the following hebbina layer
         self.hebbian_layer = None
 
-
         if self.last_layer:
             self.C_last = nn.Parameter(torch.randn(out_features, requires_grad=True, **factory_kwargs))
             self.D_last = nn.Parameter(torch.randn(out_features, requires_grad=True, **factory_kwargs))
             self.eta_last = nn.Parameter(torch.randn(out_features, requires_grad=True, **factory_kwargs))
             self.reset(self.C_last, 'normal')
             self.reset(self.D_last, 'normal')
-            self.reset(self.eta_last, 'normal_small')
+            self.reset(self.eta_last, 'normal')
 
     def reshape_input(self, input):
         if len(input.shape) == 1:
@@ -76,9 +75,11 @@ class HebbianLinearLayer(nn.Module):
 
         out = F.linear(input, self.weight, self.bias)
 
-        out = self.activation(out)
+        self.update_weights(input, self.activation(out))
 
-        self.update_weights(input, out)
+        if not self.last_layer:
+            out = self.activation(out)
+        
         return out
 
     def forward(self, input):
@@ -87,7 +88,7 @@ class HebbianLinearLayer(nn.Module):
 
         if not self.last_layer:
             out = self.activation(out)
-            
+
         return out
     
     def attach_hebbian_layer(self, layer):
@@ -95,7 +96,6 @@ class HebbianLinearLayer(nn.Module):
 
 
     def update_weights(self, presynaptic, postsynaptic):
-
         if self.bias is not None:
             presynaptic = F.pad(presynaptic, (0, 1), "constant", 1)
 
@@ -134,14 +134,13 @@ class HebbianLinearLayer(nn.Module):
             bias = dw[-1, :]
             dw = dw[:-1, :]
             self.bias = self.bias + bias
-
             
         self.weight = self.weight + dw.T
         # self.weight = self.weight + dw.T
 
         # l2 weights normalization
-        self.weight = self.weight / torch.max(torch.abs(self.weight))
-        # self.weight = F.normalize(self.weight, p=2, dim=1)
+        # self.weight = self.weight / torch.max(torch.abs(self.weight))
+        self.weight = F.normalize(self.weight, p=2, dim=1)
 
     def reset_weights(self, init="maintain"):
         # if weight is a parameter

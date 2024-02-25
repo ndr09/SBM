@@ -52,7 +52,7 @@ class NHNN(NN):
         for i in range(len(self.network)):
             ih = self.nodes[i]
             oh = self.nodes[i + 1]
-            self.dws.append(torch.zeros((oh, ih),requires_grad=True))
+            self.dws.append(torch.zeros((oh, ih), requires_grad=False))
 
 
         self.params = []
@@ -83,8 +83,8 @@ class NHNN(NN):
     def forward(self, inputs):
 
         tmp = []
-
         x0 = torch.tanh(inputs)
+        
         tmp.append(torch.reshape(torch.clone(x0),(x0.size()[0],1)))
 
         c = 0
