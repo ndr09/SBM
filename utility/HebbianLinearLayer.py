@@ -26,11 +26,10 @@ class HebbianLinearLayer(nn.Module):
         self.in_features = in_features
         self.out_features = out_features
 
-        self.weight = torch.empty((out_features, in_features), **factory_kwargs, requires_grad=False)
-        if bias:
-            self.bias = torch.empty(out_features, **factory_kwargs, requires_grad=False)
-        else:
-            self.bias = None
+        self.bias = None
+        self.weight = torch.empty((out_features, in_features), **factory_kwargs, requires_grad=False)                          
+        if bias: self.bias = torch.empty(out_features, **factory_kwargs, requires_grad=False)
+  
             
         if self.bias is not None:
             in_features += 1
@@ -100,58 +99,77 @@ class HebbianLinearLayer(nn.Module):
             presynaptic = F.pad(presynaptic, (0, 1), "constant", 1)
 
         # update weights
-        A = self.Ai * presynaptic
-        B = self.Bj * postsynaptic
-
-        # mean over the batch
-        A = torch.sum(A, dim=0).unsqueeze(0)
-        B = torch.sum(B, dim=0).unsqueeze(0)
+        A = presynaptic * self.Ai
+        B = postsynaptic * self.Bj
 
         if self.last_layer:
-            Cj = self.C_last * postsynaptic
-            D = torch.matmul(self.D.unsqueeze(0).T, self.D_last.unsqueeze(0)) # [2, 4]
+            Cj = postsynaptic * self.C_last
+            D = torch.matmul(
+                self.D.unsqueeze(0).T, 
+                self.D_last.unsqueeze(0)
+            ) 
             eta1 = self.eta_last.unsqueeze(0)
 
         else:
             if self.bias is not None:
-                Cj = self.next_hlayer.C[:-1] * postsynaptic
-                D = torch.matmul(self.D.unsqueeze(0).T, self.next_hlayer.D[:-1].unsqueeze(0))
+                Cj = postsynaptic * self.next_hlayer.C[:-1]
+                D = torch.matmul(
+                    self.D.unsqueeze(0).T, 
+                    self.next_hlayer.D[:-1].unsqueeze(0)
+                )
                 eta1 = self.next_hlayer.eta[:-1].unsqueeze(0)
             else:
-                Cj = self.next_hlayer.C * postsynaptic
-                D = torch.matmul(self.D.unsqueeze(0).T, self.next_hlayer.D.unsqueeze(0))
+                Cj = postsynaptic * self.next_hlayer.C
+                D = torch.matmul(
+                    self.D.unsqueeze(0).T, 
+                    self.next_hlayer.D.unsqueeze(0)
+                )
                 eta1 = self.next_hlayer.eta.unsqueeze(0)
 
-        Ci = self.C * presynaptic 
-        C = torch.matmul(Ci.T, Cj) # [2, 4]
+        Ci = presynaptic * self.C 
+        C = torch.bmm(Ci.unsqueeze(-1), Cj.unsqueeze(1)).permute(0, 2, 1)
 
         eta0 = self.eta.unsqueeze(0).T
-        eta = (eta0 + eta1) / 2 # [2, 4]
+        eta = (eta0 + eta1) / 2 
 
         # update weights, we do not need to repeat tensors in order to have equal
-        dw = eta * (A.T + B + C + D) / presynaptic.shape[0]
+        dw = eta.T * (A.unsqueeze(1) + B.unsqueeze(2) + C + D.T.unsqueeze(0))
+        dw = dw.sum(dim=0) # mean over the batches
         if self.bias is not None:
-            bias = dw[-1, :]
-            dw = dw[:-1, :]
+            bias = dw[:, -1]
+            dw = dw[: , :-1]
             self.bias = self.bias + bias
+            self.bias = self.normalize(self.bias)
             
-        self.weight = self.weight + dw.T
-        # self.weight = self.weight + dw.T
-
-        # l2 weights normalization
-        # self.weight = self.weight / torch.max(torch.abs(self.weight))
-        self.weight = F.normalize(self.weight, p=2, dim=1)
+        # apply the hebbian change in weights
+        self.weight = self.weight + dw
+        self.weight = self.normalize(self.weight)
 
     def reset_weights(self, init="maintain"):
-        # if weight is a parameter
         self.weight = self.weight.clone().detach()
-        self.reset(self.weight, init)
+        if self.bias is not None: self.bias = self.bias.clone().detach()
 
-        if self.bias is not None:
-            self.bias = self.bias.clone().detach()
-            self.reset(self.bias, init)
+        if init == 'linear':
+            torch.nn.init.kaiming_uniform_(self.weight, a=math.sqrt(5))
+            if self.bias is not None:
+                fan_in, _ = torch.nn.init._calculate_fan_in_and_fan_out(self.weight)
+                bound = 1 / math.sqrt(fan_in) if fan_in > 0 else 0
+                torch.nn.init.uniform_(self.bias, -bound, bound)
+        else: 
+            # if weight is a parameter
+            self.reset(self.weight, init)
+            if self.bias is not None: 
+                self.reset(self.bias, init)
+        
+        # with mantain I should keep the weights as they are, thus do not normalize
+        if init != "mantain":
+            self.weight = self.normalize(self.weight)
+            if self.bias is not None: self.bias = self.normalize(self.bias)
 
-    
+
+    def normalize(self, tensor):
+        # return tensor / torch.max(torch.abs(tensor))
+        return F.normalize(tensor, p=2, dim=-1)
 
     def reset(self, parameter, init="maintain"):
         """
@@ -169,11 +187,19 @@ class HebbianLinearLayer(nn.Module):
             torch.nn.init.normal_(parameter, 0, 0.1)
         elif init == 'normal_small':
             torch.nn.init.normal_(parameter, 0, 0.01)
+        elif init == 'normal_big':
+            torch.nn.init.normal_(parameter, 0, 1)
         elif init == 'ka_uni':
-            torch.nn.init.kaiming_uniform_(parameter, 3)
+            torch.nn.init.kaiming_uniform_(parameter, a=math.sqrt(5))
         elif init == 'uni_big':
             torch.nn.init.uniform_(parameter, -1, 1)
         elif init == 'xa_uni_big':
             torch.nn.init.xavier_uniform(parameter)
         elif init == 'zero':
             torch.nn.init.zeros_(parameter)
+
+    def get_weights(self):
+        return (self.weight, self.bias)
+    
+    def set_weights(self, weights):
+        self.weight, self.bias = weights
