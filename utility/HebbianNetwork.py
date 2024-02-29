@@ -33,22 +33,21 @@ class HebbianNetwork(nn.Module):
                 activation=activation, 
                 dtype=torch.float32,
             ))
-
-            nn.Linear
             
             if i > 0:
                 self.layers[i - 1].attach_hebbian_layer(self.layers[i])
 
-        self.reset_weights(init)
-        
-        self.dropout = nn.Dropout(dropout)
 
-        self.float()
+        self.reset_weights(init)
+        self.dropout = nn.Dropout(dropout)
 
     def learn(self, input):
         """
         Forward pass through the network, learning the weights with Hebbian learning.
         """
+        if len(input.shape) == 3 or len(input.shape) == 4:
+            input = input.reshape(input.shape[0], -1)
+
         for layer in self.layers:
             input = self.dropout(input)
             input = layer.learn(input)
@@ -58,8 +57,12 @@ class HebbianNetwork(nn.Module):
         """
         Forward pass through the network, without learning the weights.
         """
+        if len(input.shape) == 3 or len(input.shape) == 4:
+            input = input.reshape(input.shape[0], -1)
+
         for layer in self.layers:
             input = layer(input)
+
         return input
     
     def reset_weights(self, init='uni'):
@@ -69,7 +72,6 @@ class HebbianNetwork(nn.Module):
         """
         for layer in self.layers:
             layer.reset_weights(init)
-
     
     def get_weights(self):
         """

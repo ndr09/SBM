@@ -15,13 +15,15 @@ class HebbianNetworkClassifier(hn.HebbianNetwork):
             dropout=0.0,
             bias=False,
             activation=torch.tanh,
+            num_classes=10,
     ):
         super(HebbianNetworkClassifier, self).__init__(layers, init, device, dropout, bias, activation)
         self.init = init
+        self.num_classes = num_classes
 
 
     def train_loop(self, optimizer, loss_fn, train_dataloader, val_dataloader, test_dataloader, 
-                   epochs=10, scheduler=None, log=False, reset_every=1, early_stop=None):
+                   epochs=10, scheduler=None, log=False, reset_every=1, early_stop=None, backprop_every=1):
         train_loss, val_loss = [], []
         train_accuracy, val_accuracy = [], []
         test_loss, test_accuracy = 0.0, 0.0
@@ -34,39 +36,44 @@ class HebbianNetworkClassifier(hn.HebbianNetwork):
                 self.train()
                 if reset_every > 0 and e % reset_every == 0:
                     self.reset_weights(self.init)
+                else: 
+                    self.reset_weights('mantain')
 
                 epoch_train_loss = 0.0
                 epoch_train_accuracy = 0.0
-                end = len(train_dataloader) if early_stop is None else early_stop
-                with tqdm(total=end, desc='Train', unit='batch', leave=False) as train_pbar:
+                total = len(train_dataloader) if early_stop is None else early_stop
+                with tqdm(total=total, desc='Train', unit='batch', leave=False) as train_pbar:
                     for i, (inputs, targets) in enumerate(train_dataloader):
 
-                        self.reset_weights('mantain')
-                        output = self.learn(inputs.to(self.device))
+                        _ = self.learn(inputs.to(self.device))
+
+                        # output = self.learn(inputs.to(self.device))
                         out_imp = self.forward(inputs.to(self.device))
 
                         # _ = loss_fn(output, targets.to(self.device))
                         loss_imp = loss_fn(out_imp, targets.to(self.device))
 
-                        
-                        loss_imp.backward()
-                        optimizer.step()
-                        optimizer.zero_grad()
+                        if i % backprop_every == 0:
+                            loss_imp.backward()
+                            optimizer.step()
+                            optimizer.zero_grad()
+                            self.reset_weights('mantain')
+
 
                         epoch_train_loss += loss_imp.item()
                         train_pbar.update(1)
                         train_pbar.set_postfix({'Loss': loss_imp.item()})
 
                         # Calculate accuracy
-                        predicted_labels = torch.argmax(output, dim=1)
+                        predicted_labels = torch.argmax(out_imp, dim=1)
                         accuracy = sklearn.metrics.accuracy_score(targets.cpu(), predicted_labels.cpu())
                         epoch_train_accuracy += accuracy
 
                         if early_stop is not None and i >= early_stop:
                             break
 
-                train_loss.append(epoch_train_loss / len(train_dataloader))
-                train_accuracy.append(epoch_train_accuracy / len(train_dataloader))
+                train_loss.append(epoch_train_loss / total)
+                train_accuracy.append(epoch_train_accuracy / total)
 
                 # Validation loop
                 if scheduler is not None:
@@ -116,9 +123,9 @@ class HebbianNetworkClassifier(hn.HebbianNetwork):
 
         self.load_state_dict(best_params)
 
-        test_loss, test_accuracy = self.test(test_dataloader, loss_fn, log)
+        test_loss, test_accuracy, confusion_matrix = self.test(test_dataloader, loss_fn, log)
 
-        return train_loss, val_loss, test_loss, train_accuracy, val_accuracy, test_accuracy
+        return train_loss, val_loss, test_loss, train_accuracy, val_accuracy, test_accuracy, confusion_matrix
     
 
     def hebbian_train_loop(self, loss_fn, train_dataloader, val_dataloader, test_dataloader, log=False, max_iter=100):
@@ -194,9 +201,9 @@ class HebbianNetworkClassifier(hn.HebbianNetwork):
 
         self.set_weights(best_weights)
 
-        test_loss, test_accuracy = self.test(test_dataloader, loss_fn, log)
+        test_loss, test_accuracy, confusion_matrix = self.test(test_dataloader, loss_fn, log)
 
-        return train_loss, val_loss, test_loss, train_accuracy, val_accuracy, test_accuracy
+        return train_loss, val_loss, test_loss, train_accuracy, val_accuracy, test_accuracy, confusion_matrix
 
 
     
@@ -204,10 +211,10 @@ class HebbianNetworkClassifier(hn.HebbianNetwork):
         self.eval()
         test_loss = 0.0
         test_accuracy = 0.0
+        confusion_matrix = torch.zeros((self.num_classes, self.num_classes))
         with tqdm(total=len(test_dataloader), desc='Test', unit='batch') as test_pbar:
             with torch.no_grad():
                 for inputs, targets in test_dataloader:
-                    # _ = self.learn(inputs.to(self.device))
                     output = self.forward(inputs.to(self.device))
 
                     loss = loss_fn(output, targets.to(self.device))
@@ -219,11 +226,16 @@ class HebbianNetworkClassifier(hn.HebbianNetwork):
                     predicted_labels = torch.argmax(output, dim=1)
                     accuracy = sklearn.metrics.accuracy_score(targets.cpu(), predicted_labels.cpu())
                     test_accuracy += accuracy
+
+                    # Update confusion matrix
+                    for t, p in zip(targets.view(-1), predicted_labels.view(-1)):
+                        confusion_matrix[t.long(), p.long()] += 1
+
         test_loss = (test_loss / len(test_dataloader))
         test_accuracy = (test_accuracy / len(test_dataloader))
 
         if log: 
             wandb.log({"test_loss": test_loss, "test_accuracy": test_accuracy})
 
-        return test_loss, test_accuracy
+        return test_loss, test_accuracy, confusion_matrix
 

@@ -34,17 +34,17 @@ class HebbianLinearLayer(nn.Module):
         if self.bias is not None:
             in_features += 1
 
-        self.Ai = nn.Parameter(torch.empty(in_features, requires_grad=True, **factory_kwargs))
-        self.Bj = nn.Parameter(torch.empty(out_features, requires_grad=True, **factory_kwargs))
-        self.C = nn.Parameter(torch.empty(in_features, requires_grad=True, **factory_kwargs)) 
-        self.D = nn.Parameter(torch.empty(in_features, requires_grad=True, **factory_kwargs))
-        self.eta = nn.Parameter(torch.empty(in_features, requires_grad=True, **factory_kwargs))
+        self.Ai = nn.Parameter(torch.ones(in_features, requires_grad=True, **factory_kwargs) * 0.1)
+        self.Bj = nn.Parameter(torch.ones(out_features, requires_grad=True, **factory_kwargs) * 0.1)
+        self.C = nn.Parameter(torch.ones(in_features, requires_grad=True, **factory_kwargs) * 0.1) 
+        self.D = nn.Parameter(torch.ones(in_features, requires_grad=True, **factory_kwargs) * 0.1)
+        self.eta = nn.Parameter(torch.ones(in_features, requires_grad=True, **factory_kwargs) * 0.01)
 
-        self.reset(self.Ai, 'normal')
-        self.reset(self.Bj, 'normal')
-        self.reset(self.C, 'normal')
-        self.reset(self.D, 'normal')
-        self.reset(self.eta, 'normal')
+        # self.reset(self.Ai, 'normal')
+        # self.reset(self.Bj, 'normal')
+        # self.reset(self.C, 'normal')
+        # self.reset(self.D, 'normal')
+        # self.reset(self.eta, 'normal')
 
         self.device = device
         self.dtype = dtype
@@ -54,19 +54,16 @@ class HebbianLinearLayer(nn.Module):
         self.hebbian_layer = None
 
         if self.last_layer:
-            self.C_last = nn.Parameter(torch.randn(out_features, requires_grad=True, **factory_kwargs))
-            self.D_last = nn.Parameter(torch.randn(out_features, requires_grad=True, **factory_kwargs))
-            self.eta_last = nn.Parameter(torch.randn(out_features, requires_grad=True, **factory_kwargs))
-            self.reset(self.C_last, 'normal')
-            self.reset(self.D_last, 'normal')
-            self.reset(self.eta_last, 'normal')
+            self.C_last = nn.Parameter(torch.ones(out_features, requires_grad=True, **factory_kwargs) * 0.1)
+            self.D_last = nn.Parameter(torch.ones(out_features, requires_grad=True, **factory_kwargs) * 0.1)
+            self.eta_last = nn.Parameter(torch.ones(out_features, requires_grad=True, **factory_kwargs) * 0.01)
+            # self.reset(self.C_last, 'normal')
+            # self.reset(self.D_last, 'normal')
+            # self.reset(self.eta_last, 'normal')
 
     def reshape_input(self, input):
         if len(input.shape) == 1:
             input = input.unsqueeze(0)
-
-        if len(input.shape) == 3 or len(input.shape) == 4:
-            input = input.reshape(input.shape[0], -1)
         return input
 
     def learn(self, input):
@@ -99,41 +96,45 @@ class HebbianLinearLayer(nn.Module):
             presynaptic = F.pad(presynaptic, (0, 1), "constant", 1)
 
         # update weights
-        A = presynaptic * self.Ai
-        B = postsynaptic * self.Bj
+        A = presynaptic * self.Ai # [batch, in_features] * [in_features]
+        B = postsynaptic * self.Bj # [batch, out_features] * [out_features]
 
         if self.last_layer:
-            Cj = postsynaptic * self.C_last
+            Cj = postsynaptic * self.C_last # [batch, out_features] * [out_features]
             D = torch.matmul(
-                self.D.unsqueeze(0).T, 
-                self.D_last.unsqueeze(0)
-            ) 
-            eta1 = self.eta_last.unsqueeze(0)
+                self.D.unsqueeze(0).T,   # [in_features, 1] 
+                self.D_last.unsqueeze(0) # [1, out_features]
+            ) # [in_features, out_features]
+            eta1 = self.eta_last.unsqueeze(0) # [1, out_features]
 
         else:
             if self.bias is not None:
-                Cj = postsynaptic * self.next_hlayer.C[:-1]
+                Cj = postsynaptic * self.next_hlayer.C[:-1] # [batch, out_features] * [out_features]
                 D = torch.matmul(
-                    self.D.unsqueeze(0).T, 
-                    self.next_hlayer.D[:-1].unsqueeze(0)
+                    self.D.unsqueeze(0).T,               # [in_features, 1]
+                    self.next_hlayer.D[:-1].unsqueeze(0) # [1, out_features]
                 )
-                eta1 = self.next_hlayer.eta[:-1].unsqueeze(0)
+                eta1 = self.next_hlayer.eta[:-1].unsqueeze(0) # [1, out_features]
             else:
-                Cj = postsynaptic * self.next_hlayer.C
-                D = torch.matmul(
-                    self.D.unsqueeze(0).T, 
-                    self.next_hlayer.D.unsqueeze(0)
-                )
-                eta1 = self.next_hlayer.eta.unsqueeze(0)
+                Cj = postsynaptic * self.next_hlayer.C # [batch, out_features] * [out_features]
+                D = torch.matmul( 
+                    self.D.unsqueeze(0).T,          # [in_features, 1]
+                    self.next_hlayer.D.unsqueeze(0) # [1, out_features]
+                ) # [in_features, out_features]
+                eta1 = self.next_hlayer.eta.unsqueeze(0) # [1, out_features]
 
-        Ci = presynaptic * self.C 
-        C = torch.bmm(Ci.unsqueeze(-1), Cj.unsqueeze(1)).permute(0, 2, 1)
+        Ci = presynaptic * self.C # [batch, in_features] * [in_features]
+        C = torch.bmm(
+            Ci.unsqueeze(-1), # [batch, in_features, 1]
+            Cj.unsqueeze(1)   # [batch, 1, out_features]
+        ).permute(0, 2, 1)    # [batch, out_features, in_features]
 
-        eta0 = self.eta.unsqueeze(0).T
-        eta = (eta0 + eta1) / 2 
+        eta0 = self.eta.unsqueeze(0).T # [in_features, 1]
+        eta = (eta0 + eta1) / 2 # [in_features, out_features]
 
         # update weights, we do not need to repeat tensors in order to have equal
-        dw = eta.T * (A.unsqueeze(1) + B.unsqueeze(2) + C + D.T.unsqueeze(0))
+        abcd = (A.unsqueeze(1) + B.unsqueeze(2) + C + D.T.unsqueeze(0))
+        dw = eta.T * abcd  # [out_features, in_features]
         dw = dw.sum(dim=0) # mean over the batches
         if self.bias is not None:
             bias = dw[:, -1]
@@ -145,7 +146,11 @@ class HebbianLinearLayer(nn.Module):
         self.weight = self.weight + dw
         self.weight = self.normalize(self.weight)
 
+
     def reset_weights(self, init="maintain"):
+        """
+        Resets the weights of the layer.
+        """
         self.weight = self.weight.clone().detach()
         if self.bias is not None: self.bias = self.bias.clone().detach()
 
@@ -168,12 +173,16 @@ class HebbianLinearLayer(nn.Module):
 
 
     def normalize(self, tensor):
+        """
+        Normalizes the tensor.
+        """
         # return tensor / torch.max(torch.abs(tensor))
         return F.normalize(tensor, p=2, dim=-1)
+        # return tensor
 
     def reset(self, parameter, init="maintain"):
         """
-        Resets the weights of the network.
+        Resets the weights of the tensor.
 
         :param init: Initialization method for the weights. Default is "maintain".
         """    

@@ -9,7 +9,7 @@ import wandb
 # set seed for reproducibility
 torch.manual_seed(42)
 
-# torch.autograd.set_detect_anomaly(True)
+# torch.autograd.set_detect_anomaly(True)
 
 # Define the transformation to apply to the data
 transform = transforms.Compose([
@@ -44,14 +44,14 @@ model = HebbianNetworkClassifier(
     model_size, 
     device=device, 
     init="linear", 
-    dropout=0.1, 
+    #dropout=0.1, 
     bias=False, 
     activation=torch.functional.F.relu,
 )
 
 loss_fn = torch.nn.CrossEntropyLoss()
 
-optimizer = torch.optim.SGD(model.parameters(), lr=0.1, momentum=0.9)
+optimizer = torch.optim.AdamW(model.parameters(), lr=0.1, weight_decay=0.000001)
 scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.5)
 
 log = True
@@ -68,15 +68,15 @@ if log: wandb.init(
     }
 )
 
-train_loss, val_loss, test_loss, train_accuracy, val_accuracy, test_accuracy = model.train_loop(
-    optimizer, loss_fn, train_loader, val_loader, test_loader, epochs=25, log=log, # early_stop=300 # scheduler=scheduler, reset_every=1
+train_loss, val_loss, test_loss, train_accuracy, val_accuracy, test_accuracy, confusion_matrix = model.train_loop(
+    optimizer, loss_fn, train_loader, val_loader, test_loader, epochs=25, log=log, # reset_every=1, backprop_every=5
 )
 
 print(f"Test accuracy: {test_accuracy}")
 
 
 # train only with hebbian
-train_loss, val_loss, test_loss, train_accuracy, val_accuracy, test_accuracy = model.hebbian_train_loop(
+train_loss, val_loss, test_loss, train_accuracy, val_accuracy, test_accuracy, confusion_matrix = model.hebbian_train_loop(
     loss_fn, train_loader, val_loader, test_loader, max_iter=300, log=log
 ) # used trn_loader instead of train_loader and None instead of val_loader
 
