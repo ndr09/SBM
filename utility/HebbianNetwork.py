@@ -3,6 +3,8 @@ import torch.nn as nn
 from utility.HebbianLinearLayer import HebbianLinearLayer
 import queue
 from torch.nn import functional as F
+import numpy as np
+
 class HebbianNetwork(nn.Module):
 
     def __init__(
@@ -13,13 +15,26 @@ class HebbianNetwork(nn.Module):
             dropout=0.0,
             bias=False,
             activation=torch.tanh,
+            rank=1
     ) -> None:
+        """
+        Initializes the HebbianNetwork.
+        
+        :param layers: List of integers representing the number of neurons in each layer.
+        :param init: Initialization method for the weights.
+        :param device: Device to use for the network.
+        :param dropout: Dropout rate to use.
+        :param bias: Whether to use a bias.
+        :param activation: Activation function to use.
+        :param rank: Rank of the C parameter of Hebbian learning rule. Default is 1.
+        """
+
         super(HebbianNetwork, self).__init__()
         self.layers = nn.modules.ModuleList()
         self.device = device
-
         self.layer_list = layers
 
+        # Create the layers
         for i in range(len(layers) - 1):
             last_layer = i == len(layers) - 2
             if last_layer:
@@ -32,9 +47,11 @@ class HebbianNetwork(nn.Module):
                 bias=bias, 
                 activation=activation, 
                 dtype=torch.float32,
+                rank=rank
             ))
             
             if i > 0:
+                # append the current layer to the previous layer's list of attached layers
                 self.layers[i - 1].attach_hebbian_layer(self.layers[i])
 
 
@@ -45,9 +62,6 @@ class HebbianNetwork(nn.Module):
         """
         Forward pass through the network, learning the weights with Hebbian learning.
         """
-        if len(input.shape) == 3 or len(input.shape) == 4:
-            input = input.reshape(input.shape[0], -1)
-
         for layer in self.layers:
             input = self.dropout(input)
             input = layer.learn(input)
@@ -57,9 +71,6 @@ class HebbianNetwork(nn.Module):
         """
         Forward pass through the network, without learning the weights.
         """
-        if len(input.shape) == 3 or len(input.shape) == 4:
-            input = input.reshape(input.shape[0], -1)
-
         for layer in self.layers:
             input = layer(input)
 
@@ -79,7 +90,7 @@ class HebbianNetwork(nn.Module):
         """
         tmp = {}
         for i, layer in enumerate(self.layers):
-            tmp[i] = layer.get_weights()
+            tmp[i] = layer.weight
         return tmp
     
     def set_weights(self, weights):
@@ -87,4 +98,4 @@ class HebbianNetwork(nn.Module):
         Sets the weights of the network.
         """
         for i, layer in enumerate(self.layers):
-            layer.set_weights(weights[i])
+            layer.weight = weights[i].clone().detach().to(self.device)
