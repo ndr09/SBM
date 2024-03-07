@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 from utility.HebbianLinearLayer import HebbianLinearLayer
+from utility.HebbianTraceLinearLayer import HebbianTraceLinearLayer
 import queue
 from torch.nn import functional as F
 import numpy as np
@@ -10,12 +11,13 @@ class HebbianNetwork(nn.Module):
     def __init__(
             self, 
             layers: list, 
-            init,
             device='cpu',
             dropout=0.0,
             bias=False,
             activation=torch.tanh,
-            rank=1
+            neuron_centric=True,
+            init='linear',
+            use_d=False,
     ) -> None:
         """
         Initializes the HebbianNetwork.
@@ -47,24 +49,21 @@ class HebbianNetwork(nn.Module):
                 bias=bias, 
                 activation=activation, 
                 dtype=torch.float32,
-                rank=rank
+                neuron_centric=neuron_centric,
+                init=init,
+                use_d=use_d,
             ))
-            
-            if i > 0:
-                # append the current layer to the previous layer's list of attached layers
-                self.layers[i - 1].attach_hebbian_layer(self.layers[i])
-
 
         self.reset_weights(init)
         self.dropout = nn.Dropout(dropout)
 
-    def learn(self, input):
+    def learn(self, input, targets=None):
         """
         Forward pass through the network, learning the weights with Hebbian learning.
         """
         for layer in self.layers:
             input = self.dropout(input)
-            input = layer.learn(input)
+            input = layer.learn(input, targets=targets)
         return input
 
     def forward(self, input):
@@ -90,7 +89,7 @@ class HebbianNetwork(nn.Module):
         """
         tmp = {}
         for i, layer in enumerate(self.layers):
-            tmp[i] = layer.weight
+            tmp[i] = layer.weight.clone().detach().to(self.device)
         return tmp
     
     def set_weights(self, weights):
@@ -99,3 +98,18 @@ class HebbianNetwork(nn.Module):
         """
         for i, layer in enumerate(self.layers):
             layer.weight = weights[i].clone().detach().to(self.device)
+
+    def get_flatten_params(self):
+        """
+        Returns the parameters of the network as a single tensor.
+        """
+        return torch.cat([p.view(-1).clone().detach() for p in self.parameters()])
+
+    def set_params_flatten(self, flat_params):
+        """
+        Sets the parameters of the network from a single tensor.
+        """
+        idx = 0
+        for p in self.parameters():
+            p.data = flat_params[idx:idx + p.numel()].view(p.size()).clone().detach().to(self.device)
+            idx += p.numel()

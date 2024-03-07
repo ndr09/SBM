@@ -20,6 +20,8 @@ class HebbianNetworkClassifier(hn.HebbianNetwork):
             bias=False,
             activation=torch.tanh,
             num_classes=10,
+            neuron_centric=True,
+            use_d=False,
             rank=1
     ):
         """
@@ -34,7 +36,16 @@ class HebbianNetworkClassifier(hn.HebbianNetwork):
         :param num_classes: Number of classes for the classification task.
         :param rank: Rank of the C parameter of Hebbian learning rule. Default is 1.
         """
-        super(HebbianNetworkClassifier, self).__init__(layers, init, device, dropout, bias, activation, rank)
+        super(HebbianNetworkClassifier, self).__init__(
+            layers=layers,
+            device=device,
+            dropout=dropout,
+            bias=bias,
+            activation=activation,
+            neuron_centric=neuron_centric,
+            init=init,
+            use_d=use_d,
+        )
         self.init = init
         self.num_classes = num_classes
 
@@ -94,25 +105,27 @@ class HebbianNetworkClassifier(hn.HebbianNetwork):
                 with tqdm(total=total, desc='Train', unit='batch', leave=False) as train_pbar:
                     for i, (inputs, targets) in enumerate(train_dataloader):
                         # i have to call learn and forward after in order to have the gradients on the updated weights
+                        # get one hot for the targets
+                   
                         _ = self.learn(inputs.to(self.device))
-                        out_imp = self.forward(inputs.to(self.device))
+                        output = self.forward(inputs.to(self.device))
 
                         # _ = loss_fn(output, targets.to(self.device))
-                        loss_imp = loss_fn(out_imp, targets.to(self.device))
+                        loss = loss_fn(output, targets.to(self.device))
 
-                        # if i have to backpropagate, do it, otherwise skip
-                        if i % backprop_every == 0:
-                            loss_imp.backward()
+                        if backprop_every > 0 and i % backprop_every == 0:
+                            # if i have to backpropagate, do it, otherwise skip
+                            loss.backward()
                             optimizer.step()
                             optimizer.zero_grad()
                             self.reset_weights('mantain')
 
-                        epoch_train_loss += loss_imp.item()
+                        epoch_train_loss += loss.item()
                         train_pbar.update(1)
-                        train_pbar.set_postfix({'Loss': loss_imp.item()})
+                        train_pbar.set_postfix({'Loss': loss.item()})
 
                         # Calculate accuracy
-                        predicted_labels = torch.argmax(out_imp, dim=1)
+                        predicted_labels = torch.argmax(output, dim=1)
                         accuracy = sklearn.metrics.accuracy_score(targets.cpu(), predicted_labels.cpu())
                         epoch_train_accuracy += accuracy
 
@@ -199,7 +212,8 @@ class HebbianNetworkClassifier(hn.HebbianNetwork):
         iter = 0
         self.eval()
         with torch.no_grad():
-            with tqdm(total=min(len(train_dataloader), max_iter), desc='Train', unit='batch', leave=False) as train_pbar:
+            total = min(len(train_dataloader) * epochs, max_iter)
+            with tqdm(total=total, desc='Train', unit='batch', leave=False) as train_pbar:
                 for e in range(epochs):
                     for inputs, targets in train_dataloader:
                         output = self.learn(inputs.to(self.device))
@@ -309,4 +323,13 @@ class HebbianNetworkClassifier(hn.HebbianNetwork):
             wandb.log({"test_loss": test_loss, "test_accuracy": test_accuracy})
 
         return test_loss, test_accuracy, confusion_matrix
+    
+
+    def get_params(self):
+        """
+        Returns the parameters of the network.
+        
+        :return: Parameters of the network.
+        """
+        return self.state_dict()
 
