@@ -45,6 +45,7 @@ class HebbianLinearLayer(nn.Module):
         self.activation = activation
         self.neuron_centric = neuron_centric
         self.use_d = use_d
+        self.init = init
   
         # if bias is True, add one to the input features
         self.bias = bias
@@ -133,15 +134,15 @@ class HebbianLinearLayer(nn.Module):
         # update the weights with the Hebbian learning rule
         if self.neuron_centric:
             if self.last_layer and targets is not None:
-                self.update_weights_neuro_centric(self.activation(input), targets)
+                self.update_weights_neuro_centric(input, targets)
             else:
-                self.update_weights_neuro_centric(self.activation(input), self.activation(out))
+                self.update_weights_neuro_centric(input, self.activation(out))
             # self.update_oja(self.activation(input), self.activation(out))
         else:
             if self.last_layer and targets is not None:
-                self.update_weights_synaptic_centric(self.activation(input), targets)  
+                self.update_weights_synaptic_centric(input, targets)  
             else: 
-                self.update_weights_synaptic_centric(self.activation(input), self.activation(out))
+                self.update_weights_synaptic_centric(input, self.activation(out))
 
         # apply the activation function only if this is not the last layer
         # for optimal convergence properties given the Cross-Entropy loss
@@ -174,18 +175,6 @@ class HebbianLinearLayer(nn.Module):
         and the parameters C, D and eta of the next layer can be used in the update_weights method.
         """
         self.next_hlayer = layer
-
-    def update_oja(self, presynaptic, postsynaptic):
-        etaj = self.eta_last if self.last_layer else self.next_hlayer.eta
-        eta = (self.eta.unsqueeze(-1) + etaj.unsqueeze(0)) / 2
-        prepost = torch.einsum('bi, bo -> bio', presynaptic, postsynaptic) # [batch, in_features, out_features] -> batched outer product
-        prepost = torch.einsum('bio, bo -> bio', prepost, postsynaptic) # [batch, in_features, out_features] -> batched outer product
-        prepost = torch.einsum('bio, bo -> bio', prepost, postsynaptic) # [batch, in_features, out_features] -> batched outer product
-
-        dw = eta * (prepost - self.weight.T) # [batch, in_features, out_features] 
-        dw = dw.mean(dim=0) # sum over the batches   
-        # dw = self.normalize(dw)
-        self.weight = self.weight + dw.T # [in_features, out_features]
 
     def update_weights_neuro_centric(self, presynaptic, postsynaptic):
         """
@@ -258,8 +247,8 @@ class HebbianLinearLayer(nn.Module):
         """
         Normalizes the tensor with the L2 norm.
         """
-        return tensor / torch.max(torch.abs(tensor))
-        # return F.normalize(tensor, p=2, dim=-1)
+        # return tensor / torch.max(torch.abs(tensor))
+        return F.normalize(tensor, p=2, dim=-1)
 
     def reset(self, parameter, init="maintain"):
         """

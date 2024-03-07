@@ -62,7 +62,7 @@ class HebbianNetworkClassifier(hn.HebbianNetwork):
             log=False, 
             reset_every=1, 
             early_stop=None, 
-            backprop_every=1
+            backprop_every=-1
         ):
         """
         Trains the network hebbian parameters. The best parameterson the validation dataset are kept.
@@ -113,12 +113,10 @@ class HebbianNetworkClassifier(hn.HebbianNetwork):
                         # _ = loss_fn(output, targets.to(self.device))
                         loss = loss_fn(output, targets.to(self.device))
 
-                        if backprop_every > 0 and i % backprop_every == 0:
-                            # if i have to backpropagate, do it, otherwise skip
-                            loss.backward()
-                            optimizer.step()
-                            optimizer.zero_grad()
-                            self.reset_weights('mantain')
+                        loss.backward()
+                        optimizer.step()
+                        optimizer.zero_grad()
+                        self.reset_weights('mantain')
 
                         epoch_train_loss += loss.item()
                         train_pbar.update(1)

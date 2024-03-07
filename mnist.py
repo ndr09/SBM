@@ -63,8 +63,8 @@ model = HebbianNetworkClassifier(
     dropout=0.1,
     bias=False,
     activation=torch.functional.F.relu,
-    neuron_centric=True,
-    use_d=True
+    neuron_centric=False,
+    use_d=False
 )
 
 loss_fn = torch.nn.CrossEntropyLoss()
@@ -76,7 +76,7 @@ scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.8)
 num_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
 print(f"Number of parameters: {num_params}")
 
-log = True
+log = False
 if log: wandb.init(
     # st the wandb project where this run will be logged
     project="neuro-hebbian-learning-mnist-short",
@@ -92,7 +92,7 @@ if log: wandb.init(
 )
 
 train_loss, val_loss, test_loss, train_accuracy, val_accuracy, test_accuracy, confusion_matrix = model.train_loop(
-    optimizer, loss_fn, train_loader, val_loader, test_loader, epochs=10, log=log, backprop_every=1 #scheduler=scheduler,
+    optimizer, loss_fn, train_loader, val_loader, test_loader, epochs=1, log=log, #scheduler=scheduler,
 )
 
 print(f"Test accuracy: {test_accuracy}")
