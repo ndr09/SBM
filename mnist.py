@@ -55,21 +55,22 @@ print(f"Number of training samples: {len(train_dataset)}")
 print(f"Number of test samples: {len(test_dataset)}")
 
 device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
-model_size = [784, 512, 256, 10]
+
+model_size = [784, 128, 10]
 model = HebbianNetworkClassifier(
     model_size, 
     device=device, 
     init="linear",
     dropout=0.1,
     bias=False,
-    activation=torch.functional.F.relu,
-    neuron_centric=False,
+    activation=torch.functional.F.tanh,
+    neuron_centric=True,
     use_d=False
 )
 
 loss_fn = torch.nn.CrossEntropyLoss()
 
-optimizer = torch.optim.AdamW(model.parameters(), lr=0.001, weight_decay=0.0)
+optimizer = torch.optim.AdamW(model.parameters(), lr=0.0001, weight_decay=0.0)
 scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.8)
 
 # print num parameters
@@ -92,7 +93,7 @@ if log: wandb.init(
 )
 
 train_loss, val_loss, test_loss, train_accuracy, val_accuracy, test_accuracy, confusion_matrix = model.train_loop(
-    optimizer, loss_fn, train_loader, val_loader, test_loader, epochs=1, log=log, #scheduler=scheduler,
+    optimizer, loss_fn, train_loader, val_loader, test_loader, epochs=10, log=log, #scheduler=scheduler,
 )
 
 print(f"Test accuracy: {test_accuracy}")
@@ -100,7 +101,7 @@ print(f"Test accuracy: {test_accuracy}")
 
 # train only with hebbian
 train_loss, val_loss, test_loss, train_accuracy, val_accuracy, test_accuracy, confusion_matrix = model.hebbian_train_loop(
-    loss_fn, permuted_train_loader, None, test_loader, max_iter=2000, log=log, epochs=5
+    loss_fn, val_loader, None, test_loader, max_iter=704, log=log, epochs=1
 ) # used trn_loader instead of train_loader and None instead of val_loader
 
 print(f"Test accuracy hebbian: {test_accuracy}")

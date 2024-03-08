@@ -18,6 +18,7 @@ class HebbianNetwork(nn.Module):
             neuron_centric=True,
             init='linear',
             use_d=False,
+            train_weights=False,
     ) -> None:
         """
         Initializes the HebbianNetwork.
@@ -35,6 +36,7 @@ class HebbianNetwork(nn.Module):
         self.layers = nn.modules.ModuleList()
         self.device = device
         self.layer_list = layers
+        self.activation = activation
 
         # Create the layers
         for i in range(len(layers) - 1):
@@ -52,18 +54,21 @@ class HebbianNetwork(nn.Module):
                 neuron_centric=neuron_centric,
                 init=init,
                 use_d=use_d,
+                train_weights=train_weights
             ))
 
         self.reset_weights(init)
         self.dropout = nn.Dropout(dropout)
 
+
     def learn(self, input, targets=None):
         """
         Forward pass through the network, learning the weights with Hebbian learning.
         """
+        input = self.activation(input)
         for layer in self.layers:
             input = self.dropout(input)
-            input = layer.learn(input, targets=targets)
+            input = layer.learn(input, targets)
         return input
 
     def forward(self, input):

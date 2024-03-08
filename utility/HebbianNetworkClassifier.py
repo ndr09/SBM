@@ -22,7 +22,8 @@ class HebbianNetworkClassifier(hn.HebbianNetwork):
             num_classes=10,
             neuron_centric=True,
             use_d=False,
-            rank=1
+            rank=1,
+            train_weights=False,
     ):
         """
         Initializes the HebbianNetworkClassifier.
@@ -45,6 +46,7 @@ class HebbianNetworkClassifier(hn.HebbianNetwork):
             neuron_centric=neuron_centric,
             init=init,
             use_d=use_d,
+            train_weights=train_weights,
         )
         self.init = init
         self.num_classes = num_classes
@@ -62,7 +64,7 @@ class HebbianNetworkClassifier(hn.HebbianNetwork):
             log=False, 
             reset_every=1, 
             early_stop=None, 
-            backprop_every=-1
+            backprop_every=1
         ):
         """
         Trains the network hebbian parameters. The best parameterson the validation dataset are kept.
@@ -87,7 +89,6 @@ class HebbianNetworkClassifier(hn.HebbianNetwork):
 
         # best set of parameters
         best_params = None
-        self.reset_weights(self.init)
 
         with tqdm(total=epochs, desc='Training', unit='epoch') as pbar:
             for e in range(epochs):
@@ -106,17 +107,22 @@ class HebbianNetworkClassifier(hn.HebbianNetwork):
                     for i, (inputs, targets) in enumerate(train_dataloader):
                         # i have to call learn and forward after in order to have the gradients on the updated weights
                         # get one hot for the targets
-                   
-                        _ = self.learn(inputs.to(self.device))
+                        # t = torch.nn.functional.one_hot(targets, self.num_classes).float()
+                    
+                        output = self.learn(inputs.to(self.device))
+                        # if output.grad_fn is None:
+                        #     train_pbar.update(1)
+                        #     continue
                         output = self.forward(inputs.to(self.device))
 
                         # _ = loss_fn(output, targets.to(self.device))
                         loss = loss_fn(output, targets.to(self.device))
 
-                        loss.backward()
-                        optimizer.step()
-                        optimizer.zero_grad()
-                        self.reset_weights('mantain')
+                        if i % backprop_every == 0:
+                            loss.backward(retain_graph=True)
+                            optimizer.step()
+                            optimizer.zero_grad()
+                            self.reset_weights('mantain')
 
                         epoch_train_loss += loss.item()
                         train_pbar.update(1)
@@ -187,7 +193,7 @@ class HebbianNetworkClassifier(hn.HebbianNetwork):
         return train_loss, val_loss, test_loss, train_accuracy, val_accuracy, test_accuracy, confusion_matrix
     
 
-    def hebbian_train_loop(self, loss_fn, train_dataloader, val_dataloader, test_dataloader, log=False, epochs=1, max_iter=100):
+    def hebbian_train_loop(self, loss_fn, train_dataloader, val_dataloader, test_dataloader, log=False, epochs=1, max_iter=100, reset=True):
         """
         Trains the network only with hebbian learning. The best parameters on the validation dataset are kept.
         
@@ -205,7 +211,8 @@ class HebbianNetworkClassifier(hn.HebbianNetwork):
         test_loss, test_accuracy = 0.0, 0.0
 
         best_weights = None
-        self.reset_weights(self.init)
+        if reset:
+            self.reset_weights(self.init)
 
         iter = 0
         self.eval()
@@ -214,8 +221,10 @@ class HebbianNetworkClassifier(hn.HebbianNetwork):
             with tqdm(total=total, desc='Train', unit='batch', leave=False) as train_pbar:
                 for e in range(epochs):
                     for inputs, targets in train_dataloader:
-                        output = self.learn(inputs.to(self.device))
+                        # t = torch.nn.functional.one_hot(targets, self.num_classes).float()
+                        output = self.learn(inputs.to(self.device))#, t.to(self.device))
                         loss = loss_fn(output, targets.to(self.device))
+
 
                         train_loss.append(loss.item())
                         # Calculate accuracy
@@ -282,7 +291,7 @@ class HebbianNetworkClassifier(hn.HebbianNetwork):
 
 
     
-    def test(self, test_dataloader, loss_fn, log=False):
+    def test(self, test_dataloader, loss_fn, log=False, online=False):
         """
         Tests the network on the test set.
         
@@ -298,7 +307,12 @@ class HebbianNetworkClassifier(hn.HebbianNetwork):
         with tqdm(total=len(test_dataloader), desc='Test', unit='batch') as test_pbar:
             with torch.no_grad():
                 for inputs, targets in test_dataloader:
-                    output = self.forward(inputs.to(self.device))
+                    if online:
+                        output = torch.zeros((len(inputs), self.num_classes)).to(self.device)
+                        for i in range(len(inputs)):
+                            output[i, :] = self.learn(inputs[i].unsqueeze(0).to(self.device))
+                    else:
+                        output = self.forward(inputs.to(self.device))
 
                     loss = loss_fn(output, targets.to(self.device))
                     test_loss = loss.item() / len(inputs) # keep only last

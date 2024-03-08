@@ -144,7 +144,8 @@ class HebbianTraceLinearLayer(nn.Module):
         Normalizes the tensor with the L2 norm.
         """
         # return tensor / torch.max(torch.abs(tensor))
-        return F.normalize(tensor, p=2, dim=-1)
+        return F.normalize(tensor, p=2, dim=1)
+
 
     def reset(self, parameter, init="maintain"):
         """

@@ -81,68 +81,68 @@ class NHNN(NN):
 
 
     def forward(self, inputs):
-
-        tmp = []
-        x0 = torch.tanh(inputs)
-        
-        tmp.append(torch.reshape(torch.clone(x0),(x0.size()[0],1)))
-
-        c = 0
+        inputs = torch.tanh(inputs)
+        tmp = [ inputs.clone().detach().unsqueeze(-1) ]
+        layer_idx = 0
 
         for l in self.network:
-            ih = self.nodes[c]
-            oh = self.nodes[c + 1]
-            dw = torch.zeros((oh, ih))
+            input_size = self.nodes[layer_idx]
+            output_size = self.nodes[layer_idx + 1]
+            dw = torch.zeros((output_size, input_size))
 
-            if len(self.activations) > c + 1:
-                for i in range(ih):
-                    for o in range(oh):
+            if len(self.activations) > layer_idx + 1:
+                for i in range(input_size):
+                    for o in range(output_size):
                         # presynaptic value
-                        ai = self.a[c][i].forward(self.activations[c][i])
+                        ai = self.a[layer_idx][i].forward(self.activations[layer_idx][i])
 
                         # postsynaptic value
-                        bj = self.b[c + 1][o].forward(self.activations[c + 1][o])
+                        bj = self.b[layer_idx + 1][o].forward(self.activations[layer_idx + 1][o])
 
                         # presynaptic * postsynaptic
-                        ci = self.c[c][i].forward(self.activations[c][i])
-                        cj = self.c[c + 1][o].forward(self.activations[c + 1][o])
+                        ci = self.c[layer_idx][i].forward(self.activations[layer_idx][i])
+                        cj = self.c[layer_idx + 1][o].forward(self.activations[layer_idx + 1][o])
                         cij = ci * cj
                         
                         # bias
-                        di = self.d[c][i].forward(torch.ones(1, dtype=torch.float))
-                        dj = self.d[c + 1][o].forward(torch.ones(1, dtype=torch.float))
+                        di = self.d[layer_idx][i].forward(torch.ones(1, dtype=torch.float))
+                        dj = self.d[layer_idx + 1][o].forward(torch.ones(1, dtype=torch.float))
                         dij = di * dj
 
                         # calculate the change in weights
-                        ei = self.e[c][i].forward(torch.ones(1, dtype=torch.float))
-                        ej = self.e[c + 1][o].forward(torch.ones(1, dtype=torch.float))
+                        ei = self.e[layer_idx][i].forward(torch.ones(1, dtype=torch.float))
+                        ej = self.e[layer_idx + 1][o].forward(torch.ones(1, dtype=torch.float))
                         eta  =  0.5 * (ei + ej)
 
                         dw[o, i] = eta * (ai + bj + cij + dij)
 
-                self.dws[c] = dw
+                self.dws[layer_idx] = dw
 
             # calculate the change output
-            dw_out = torch.matmul(dw, x0)
+            dw_out = torch.matmul(dw, inputs)
 
             # add the change in weights output to the weights output
-            x1 = l(x0) + dw_out
+            x_out = l(inputs) + dw_out
 
-            if not c == len(self.network)-1:
-                x1 = torch.tanh(x1)
+            # apply the activation function if not the last layer
+            if not layer_idx == len(self.network)-1:
+                x_out = torch.tanh(x_out)
 
-            tmp.append(torch.reshape(torch.clone(x1), (x1.size()[0], 1)))
+            # append the output of the current layer to the list of activations
+            tmp.append(x_out.clone().detach().unsqueeze(-1))
 
             # set the output as the input for the next layer
-            x0 = x1
-            c += 1
+            inputs = x_out
+            layer_idx += 1
 
         # sets the weights of the network
         for i in range(len(self.network)):
             self.set_weights_layer(self.dws[i],i)
+
+        # save all the outputs of the network
         self.activations = tmp[:]
 
-        return x1
+        return x_out
 
     def forward_nu(self,inputs):
         """

@@ -19,7 +19,8 @@ class HebbianLinearLayer(nn.Module):
             init="linear",
             neuron_centric=True,
             use_d=False,
-            rank=1
+            rank=1,
+            train_weights=True,
     ) -> None:
         """
         Initializes the HebbianLinearLayer.
@@ -46,16 +47,25 @@ class HebbianLinearLayer(nn.Module):
         self.neuron_centric = neuron_centric
         self.use_d = use_d
         self.init = init
-  
+        self.train_weights = train_weights
+
         # if bias is True, add one to the input features
         self.bias = bias
         if bias: in_features += 1
 
-        # weight is not a parameter, thus it will not appear in the list of parameters of the model
-        self.weight = torch.empty((out_features, in_features), **factory_kwargs, requires_grad=False)     
-        self.reset(self.weight, init) # initialize the weights with a normal distribution
-        # normalize the weight so the norm is 1 as it will be in the update_weights method
-        self.weight = self.normalize(self.weight)   
+
+        if train_weights:
+            # weight is a parameter, thus it will appear in the list of parameters of the model
+            self.weight = nn.Parameter(torch.empty((out_features, in_features), **factory_kwargs, requires_grad=True))
+            self.reset(self.weight, init)
+            self.weight.data = self.normalize(self.weight)
+
+        else:
+            # weight is not a parameter, thus it will not appear in the list of parameters of the model
+            self.weight = torch.empty((out_features, in_features), **factory_kwargs, requires_grad=False)     
+            self.reset(self.weight, init) # initialize the weights with a normal distribution
+            # normalize the weight so the norm is 1 as it will be in the update_weights method
+            self.weight = self.normalize(self.weight) 
 
         if self.neuron_centric:               
             # parameters of the Hebbian learning rule, using nn.Parameter to make them appear in the list of parameters of the model
@@ -100,9 +110,6 @@ class HebbianLinearLayer(nn.Module):
                 self.D = nn.Parameter(torch.empty((in_features, out_features), requires_grad=True, **factory_kwargs))
                 self.reset(self.D, 'normal')
 
-        # this is the following hebbian layer, it will be set at netwwork level with the attach_hebbian_layer method
-        self.next_hlayer = None
-
 
     def reshape_input(self, input):
         """
@@ -134,19 +141,17 @@ class HebbianLinearLayer(nn.Module):
         # update the weights with the Hebbian learning rule
         if self.neuron_centric:
             if self.last_layer and targets is not None:
-                self.update_weights_neuro_centric(input, targets)
+                self.update_weights_neuro_centric(self.activation(input), self.activation(targets))
             else:
-                self.update_weights_neuro_centric(input, self.activation(out))
-            # self.update_oja(self.activation(input), self.activation(out))
+                self.update_weights_neuro_centric(self.activation(input), self.activation(out))
         else:
             if self.last_layer and targets is not None:
-                self.update_weights_synaptic_centric(input, targets)  
+                self.update_weights_synaptic_centric(self.activation(input), self.activation(targets))  
             else: 
-                self.update_weights_synaptic_centric(input, self.activation(out))
+                self.update_weights_synaptic_centric(self.activation(input), self.activation(out))
 
         # apply the activation function only if this is not the last layer
         # for optimal convergence properties given the Cross-Entropy loss
-        # out = F.linear(input, self.weight)
         if not self.last_layer:
             out = self.activation(out)
         
@@ -169,12 +174,6 @@ class HebbianLinearLayer(nn.Module):
 
         return out
     
-    def attach_hebbian_layer(self, layer):
-        """
-        Attaches the next Hebbian layer to this layer. In this way, the next layer can be accessed from this layer
-        and the parameters C, D and eta of the next layer can be used in the update_weights method.
-        """
-        self.next_hlayer = layer
 
     def update_weights_neuro_centric(self, presynaptic, postsynaptic):
         """
@@ -195,9 +194,10 @@ class HebbianLinearLayer(nn.Module):
         
         eta = (self.etai.unsqueeze(-1) + self.etaj.unsqueeze(0)) / 2 # [in_features, out_features] -> "outer sum"
         abcd = (A.unsqueeze(2) + B.unsqueeze(1) + C) # sum of the marices (with automatic broadcasting)
-        
-        if self.use_d: 
-            DiDj = torch.einsum('i, o -> io', self.Di, self.Dj) # [in_features, out_features] -> outer product
+
+        # Component D (optional)
+        if self.use_d:
+            DiDj = torch.einsum('i, o -> io', self.Di, self.Dj)
             abcd = abcd + DiDj.unsqueeze(0)
 
         dw = eta * abcd # [batch, in_features, out_features]
@@ -205,9 +205,19 @@ class HebbianLinearLayer(nn.Module):
             
         # apply the hebbian change in weights
         self.weight = self.weight + dw.T # [out_features, in_features]
+        dw = dw.sum(dim=0).T
 
         # normalize the weights with the given rule
         self.weight = self.normalize(self.weight)
+        # apply the hebbian change in weights
+        if self.train_weights:
+            # self.weight.data = self.weight.data * 0.9 + dw  * 0.1
+            self.weight.data = self.weight.data + dw # [in_features, out_features]
+            self.weight.data = self.normalize(self.weight)
+        else:
+            # self.weight = self.weight * 0.9 + dw  * 0.1
+            self.weight = self.weight + dw # [in_features, out_features]
+            self.weight = self.normalize(self.weight)
 
     def update_weights_synaptic_centric(self, presynaptic, postsynaptic):
         """
@@ -221,17 +231,22 @@ class HebbianLinearLayer(nn.Module):
         B = torch.einsum('bo, io -> bio', postsynaptic, self.Bj)
         C = torch.einsum('io, bi, bo -> bio', self.C, presynaptic, postsynaptic)
         
-        abcd = (A + B + C) # sum of the marices (with automatic broadcasting)
+        abcd = A + B + C # sum of the marices (with automatic broadcasting)
         if self.use_d: abcd = abcd + self.D.unsqueeze(0)
 
         dw = self.eta.unsqueeze(0) * abcd  # [out_features, in_features]
-        dw = dw.sum(dim=0) # sum over the batches
+        dw = dw.sum(dim=0).T # sum over the batches
+        dw = self.normalize(dw)
 
         # apply the hebbian change in weights
-        self.weight = self.weight + dw.T # [in_features, out_features]
-
-        # normalize the weights with the given rule
-        self.weight = self.normalize(self.weight)
+        if self.train_weights:
+            # self.weight.data = self.weight.data * 0.9 + dw  * 0.1# [in_features, out_features]
+            self.weight.data = self.weight.data + dw # [in_features, out_features]
+            self.weight.data = self.normalize(self.weight)
+        else:
+            # self.weight = self.weight * 0.9 + dw * 0.1 # [in_features, out_features]
+            self.weight = self.weight + dw
+            self.weight = self.normalize(self.weight)
 
 
     def reset_weights(self, init="maintain"):
@@ -239,8 +254,12 @@ class HebbianLinearLayer(nn.Module):
         Resets the weights of the layer.
         """
         # need to detach to clean the computational graph of the gradients
-        self.weight = self.weight.clone().detach()
-        self.reset(self.weight, init)
+        if self.train_weights:
+            self.weight.data = self.weight.data.clone().detach()
+            self.weight.data = self.reset(self.weight, init)
+        else:
+            self.weight = self.weight.clone().detach()
+            self.weight = self.reset(self.weight, init)
 
 
     def normalize(self, tensor):
@@ -277,4 +296,5 @@ class HebbianLinearLayer(nn.Module):
             return torch.nn.init.xavier_uniform(parameter)
         elif init == 'zero':
             return torch.nn.init.zeros_(parameter)
-        return parameter
+        else:
+            return parameter
