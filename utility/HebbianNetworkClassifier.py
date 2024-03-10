@@ -107,9 +107,8 @@ class HebbianNetworkClassifier(hn.HebbianNetwork):
                     for i, (inputs, targets) in enumerate(train_dataloader):
                         # i have to call learn and forward after in order to have the gradients on the updated weights
                         # get one hot for the targets
-                        # t = torch.nn.functional.one_hot(targets, self.num_classes).float()
-                    
-                        output = self.learn(inputs.to(self.device))
+                        t = torch.nn.functional.one_hot(targets, self.num_classes).float() * 2. - 1.
+                        output = self.learn(inputs.to(self.device), t.to(self.device))
                         # if output.grad_fn is None:
                         #     train_pbar.update(1)
                         #     continue
@@ -221,8 +220,8 @@ class HebbianNetworkClassifier(hn.HebbianNetwork):
             with tqdm(total=total, desc='Train', unit='batch', leave=False) as train_pbar:
                 for e in range(epochs):
                     for inputs, targets in train_dataloader:
-                        # t = torch.nn.functional.one_hot(targets, self.num_classes).float()
-                        output = self.learn(inputs.to(self.device))#, t.to(self.device))
+                        t = torch.nn.functional.one_hot(targets, self.num_classes).float() * 2. - 1.
+                        output = self.learn(inputs.to(self.device), t.to(self.device))
                         loss = loss_fn(output, targets.to(self.device))
 
 

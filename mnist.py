@@ -56,7 +56,7 @@ print(f"Number of test samples: {len(test_dataset)}")
 
 device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
 
-model_size = [784, 128, 10]
+model_size = [784, 256, 128, 10]
 model = HebbianNetworkClassifier(
     model_size, 
     device=device, 
@@ -65,12 +65,12 @@ model = HebbianNetworkClassifier(
     bias=False,
     activation=torch.functional.F.tanh,
     neuron_centric=True,
-    use_d=False
+    use_d=True
 )
 
 loss_fn = torch.nn.CrossEntropyLoss()
 
-optimizer = torch.optim.AdamW(model.parameters(), lr=0.0001, weight_decay=0.0)
+optimizer = torch.optim.AdamW(model.parameters(), lr=0.001, weight_decay=0.0)
 scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.8)
 
 # print num parameters

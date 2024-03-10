@@ -65,9 +65,9 @@ test_loaders = [DataLoader(dataset, batch_size=batch_size, shuffle=False)
                    for dataset in test_datasets]
 
 device = "cuda" if torch.cuda.is_available() else "mps" if torch.backends.mps.is_available() else "cpu"
-model_size = [784, 128, 2]
+model_size = [784, 256, 128, 2]
 lr = 0.001
-wd = 0.0
+wd = 0.001
 model = HebbianNetworkClassifier(
     model_size, 
     device=device, 
@@ -75,10 +75,10 @@ model = HebbianNetworkClassifier(
     dropout=0.1,
     bias=False,
     activation=torch.functional.F.tanh,
-    neuron_centric=True,
+    neuron_centric=False,
     use_d=False,
     num_classes=2,
-    train_weights=False
+    train_weights=True
 )
 
 loss_fn = torch.nn.CrossEntropyLoss()
@@ -105,30 +105,31 @@ if log: wandb.init(
     
 for i, (train_loader, val_loader, test_loader) in enumerate(zip(train_loaders, val_loaders, test_loaders)):
     optimizer = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=wd)
-    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.8)
 
    #if i == 0:
     train_loss, val_loss, test_loss, train_accuracy, val_accuracy, test_accuracy, confusion_matrix = model.train_loop(
-        optimizer, loss_fn, train_loader, val_loader, test_loader, epochs=2, log=log, scheduler=scheduler, reset_every=-1
+        optimizer, loss_fn, train_loader, val_loader, test_loader, epochs=1, log=log, reset_every=-1
     )
+    lr = lr* 0.5
     print(f"Test accuracy for task {tasks[i]}: {test_accuracy}")
-    if i == 1: break
+    if i == 2: break
 
-model.reset_weights()
+# model.reset_weights()
 print("----Hebbian training-----")
 
 for i, (val_loader, test_loader) in enumerate(zip(val_loaders, test_loaders)):
+    break
     train_loss, val_loss, test_loss, train_accuracy, val_accuracy, test_accuracy, confusion_matrix = model.hebbian_train_loop(
-            loss_fn, val_loader, None, test_loader, epochs=10, max_iter=1000, log=log, reset=False
+            loss_fn, val_loader, None, test_loader, epochs=30, max_iter=3000, log=log, reset=False
     )
 
     print(f"Test accuracy for task {tasks[i]}: {test_accuracy}")
-    if i == 1: break
+    if i == 2: break
 
 print("----Final test-----")
 for i, test_loader in enumerate(test_loaders):
-    test_loss, test_accuracy, confusion_matrix = model.test(test_loader, loss_fn, log=log, online=True)
+    test_loss, test_accuracy, confusion_matrix = model.test(test_loader, loss_fn, log=log, online=False)
     print(f"Test accuracy for task {tasks[i]}: {test_accuracy}")
-    if i == 1: break
+    if i == 2: break
 
 if log: wandb.finish()

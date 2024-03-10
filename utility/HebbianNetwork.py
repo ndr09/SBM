@@ -19,6 +19,7 @@ class HebbianNetwork(nn.Module):
             init='linear',
             use_d=False,
             train_weights=False,
+            use_targets=False
     ) -> None:
         """
         Initializes the HebbianNetwork.
@@ -37,6 +38,7 @@ class HebbianNetwork(nn.Module):
         self.device = device
         self.layer_list = layers
         self.activation = activation
+        self.use_targets = use_targets
 
         # Create the layers
         for i in range(len(layers) - 1):
@@ -60,21 +62,51 @@ class HebbianNetwork(nn.Module):
         self.reset_weights(init)
         self.dropout = nn.Dropout(dropout)
 
+    def reshape_input(self, input):
+        """
+        Reshapes the input to the correct shape. If the input is not in batch form, it is reshaped to be in batch form.
+        If the layer has a bias, the input is padded with ones.
+        """
+        if len(input.shape) == 1:
+            input = input.unsqueeze(0)
+
+        if len(input.shape) == 3 or len(input.shape) == 4:
+            input = input.reshape(input.shape[0], -1)
+
+        return input
+
 
     def learn(self, input, targets=None):
         """
         Forward pass through the network, learning the weights with Hebbian learning.
         """
+        input = self.reshape_input(input)
         input = self.activation(input)
-        for layer in self.layers:
-            input = self.dropout(input)
-            input = layer.learn(input, targets)
+
+        if self.use_targets:            
+            old_input = input
+            for i in range(len(self.layers)):
+                input = self.dropout(input)
+                out = self.layers[i].forward(input)
+                if i > 0:
+                    # calculate the inverse
+                    inv_out = self.layers[i].backward(out)
+                    self.layers[i - 1].update_weights(old_input, inv_out)
+                    old_input = input
+                if i == len(self.layers) - 1:
+                    self.layers[i].update_weights(input, out, targets)
+                input = out
+        else:
+            for layer in self.layers:
+                input = self.dropout(input)
+                input = layer.learn(input)
         return input
 
     def forward(self, input):
         """
         Forward pass through the network, without learning the weights.
         """
+        input = self.reshape_input(input)
         for layer in self.layers:
             input = layer(input)
 
