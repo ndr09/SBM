@@ -72,13 +72,14 @@ model = HebbianNetworkClassifier(
     model_size, 
     device=device, 
     init="linear",
-    dropout=0.1,
+    # dropout=0.1,
     bias=False,
-    activation=torch.functional.F.tanh,
-    neuron_centric=False,
+    activation=torch.functional.F.relu,
+    neuron_centric=True,
     use_d=False,
     num_classes=2,
-    train_weights=True
+    train_weights=False,
+    use_tatgets=True
 )
 
 loss_fn = torch.nn.CrossEntropyLoss()
@@ -108,28 +109,32 @@ for i, (train_loader, val_loader, test_loader) in enumerate(zip(train_loaders, v
 
    #if i == 0:
     train_loss, val_loss, test_loss, train_accuracy, val_accuracy, test_accuracy, confusion_matrix = model.train_loop(
-        optimizer, loss_fn, train_loader, val_loader, test_loader, epochs=1, log=log, reset_every=-1
+        optimizer, loss_fn, train_loader, val_loader, test_loader, epochs=1, log=log, reset_every=-1, early_stop=80
     )
-    lr = lr* 0.5
     print(f"Test accuracy for task {tasks[i]}: {test_accuracy}")
-    if i == 2: break
+    # if i == 2: break
 
-# model.reset_weights()
+model.reset_weights()
 print("----Hebbian training-----")
 
+# reverse order
+tasks = tasks[::-1]
+train_loaders = train_loaders[::-1]
+val_loaders = val_loaders[::-1]
+test_loaders = test_loaders[::-1]
+
 for i, (val_loader, test_loader) in enumerate(zip(val_loaders, test_loaders)):
-    break
     train_loss, val_loss, test_loss, train_accuracy, val_accuracy, test_accuracy, confusion_matrix = model.hebbian_train_loop(
             loss_fn, val_loader, None, test_loader, epochs=30, max_iter=3000, log=log, reset=False
     )
 
     print(f"Test accuracy for task {tasks[i]}: {test_accuracy}")
-    if i == 2: break
+    # if i == 2: break
 
 print("----Final test-----")
 for i, test_loader in enumerate(test_loaders):
-    test_loss, test_accuracy, confusion_matrix = model.test(test_loader, loss_fn, log=log, online=False)
+    test_loss, test_accuracy, confusion_matrix = model.test(test_loader, loss_fn, log=log, online=True)
     print(f"Test accuracy for task {tasks[i]}: {test_accuracy}")
-    if i == 2: break
+    # if i == 2: break
 
 if log: wandb.finish()

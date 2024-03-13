@@ -5,6 +5,7 @@ from utility.HebbianTraceLinearLayer import HebbianTraceLinearLayer
 import queue
 from torch.nn import functional as F
 import numpy as np
+import torchvision.transforms.functional as TF
 
 class HebbianNetwork(nn.Module):
 
@@ -73,6 +74,7 @@ class HebbianNetwork(nn.Module):
         if len(input.shape) == 3 or len(input.shape) == 4:
             input = input.reshape(input.shape[0], -1)
 
+        input = (input - input.mean(dim=-1, keepdim=True)) / input.std(dim=-1, keepdim=True)
         return input
 
 
@@ -80,8 +82,12 @@ class HebbianNetwork(nn.Module):
         """
         Forward pass through the network, learning the weights with Hebbian learning.
         """
+        # add gaussian blur to the input
+        
+        # input = TF.gaussian_blur(input, kernel_size=3)
         input = self.reshape_input(input)
         input = self.activation(input)
+        hebb_loss = []
 
         if self.use_targets:            
             old_input = input
@@ -100,17 +106,21 @@ class HebbianNetwork(nn.Module):
             for layer in self.layers:
                 input = self.dropout(input)
                 input = layer.learn(input)
-        return input
+                hebb_loss.append(layer.loss(input))
+        return input, hebb_loss
 
     def forward(self, input):
         """
         Forward pass through the network, without learning the weights.
         """
         input = self.reshape_input(input)
+        hebb_loss = []
+
         for layer in self.layers:
             input = layer(input)
+            hebb_loss.append(layer.loss(input))
 
-        return input
+        return input, hebb_loss
     
     def reset_weights(self, init='uni'):
         """

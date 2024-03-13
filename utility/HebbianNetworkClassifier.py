@@ -24,6 +24,7 @@ class HebbianNetworkClassifier(hn.HebbianNetwork):
             use_d=False,
             rank=1,
             train_weights=False,
+            use_tatgets=False
     ):
         """
         Initializes the HebbianNetworkClassifier.
@@ -47,6 +48,7 @@ class HebbianNetworkClassifier(hn.HebbianNetwork):
             init=init,
             use_d=use_d,
             train_weights=train_weights,
+            use_targets=use_tatgets
         )
         self.init = init
         self.num_classes = num_classes
@@ -108,17 +110,26 @@ class HebbianNetworkClassifier(hn.HebbianNetwork):
                         # i have to call learn and forward after in order to have the gradients on the updated weights
                         # get one hot for the targets
                         t = torch.nn.functional.one_hot(targets, self.num_classes).float() * 2. - 1.
-                        output = self.learn(inputs.to(self.device), t.to(self.device))
+                        # output = torch.zeros((len(inputs) - 1, self.num_classes)).to(self.device)
+                        # for j, input in enumerate(inputs):
+                        #    if j == 0:
+                        #        _ = self.learn(input.to(self.device).unsqueeze(0))
+                        #    else:
+                        #        output[j - 1, :] = self.learn(input.to(self.device).unsqueeze(0))
+                        output, _ = self.learn(inputs.to(self.device), t.to(self.device))
+                        # if output.grad_fn is None:
+                        #    train_pbar.update(1)
+                        #    continue
                         # if output.grad_fn is None:
                         #     train_pbar.update(1)
                         #     continue
-                        output = self.forward(inputs.to(self.device))
+                        output, hebb = self.forward(inputs.to(self.device))
 
                         # _ = loss_fn(output, targets.to(self.device))
                         loss = loss_fn(output, targets.to(self.device))
 
                         if i % backprop_every == 0:
-                            loss.backward(retain_graph=True)
+                            loss.backward()
                             optimizer.step()
                             optimizer.zero_grad()
                             self.reset_weights('mantain')
@@ -150,7 +161,7 @@ class HebbianNetworkClassifier(hn.HebbianNetwork):
                     with torch.no_grad():
                         for inputs, targets in val_dataloader:
                             # _ = self.learn(inputs.to(self.device))
-                            output = self.forward(inputs.to(self.device))
+                            output, _ = self.forward(inputs.to(self.device))
 
                             loss = loss_fn(output, targets.to(self.device))
                             epoch_val_loss += loss.item()
@@ -221,7 +232,7 @@ class HebbianNetworkClassifier(hn.HebbianNetwork):
                 for e in range(epochs):
                     for inputs, targets in train_dataloader:
                         t = torch.nn.functional.one_hot(targets, self.num_classes).float() * 2. - 1.
-                        output = self.learn(inputs.to(self.device), t.to(self.device))
+                        output, _ = self.learn(inputs.to(self.device), t.to(self.device))
                         loss = loss_fn(output, targets.to(self.device))
 
 
@@ -249,7 +260,7 @@ class HebbianNetworkClassifier(hn.HebbianNetwork):
                                 with torch.no_grad():
                                     for inputs, targets in val_dataloader:
                                         # _ = self.learn(inputs.to(self.device))
-                                        output = self.forward(inputs.to(self.device))
+                                        output, _ = self.forward(inputs.to(self.device))
 
                                         loss = loss_fn(output, targets.to(self.device))
                                         epoch_val_loss += loss.item()
@@ -309,9 +320,9 @@ class HebbianNetworkClassifier(hn.HebbianNetwork):
                     if online:
                         output = torch.zeros((len(inputs), self.num_classes)).to(self.device)
                         for i in range(len(inputs)):
-                            output[i, :] = self.learn(inputs[i].unsqueeze(0).to(self.device))
+                            output[i, :], _ = self.learn(inputs[i].unsqueeze(0).to(self.device))
                     else:
-                        output = self.forward(inputs.to(self.device))
+                        output, _ = self.forward(inputs.to(self.device))
 
                     loss = loss_fn(output, targets.to(self.device))
                     test_loss = loss.item() / len(inputs) # keep only last
