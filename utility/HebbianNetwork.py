@@ -84,7 +84,7 @@ class HebbianNetwork(nn.Module):
         """
         # add gaussian blur to the input
         
-        # input = TF.gaussian_blur(input, kernel_size=3)
+        # input = nn.AvgPool2d(7, stride=1, padding=3)(input)
         input = self.reshape_input(input)
         input = self.activation(input)
         hebb_loss = []
@@ -105,8 +105,9 @@ class HebbianNetwork(nn.Module):
         else:
             for layer in self.layers:
                 input = self.dropout(input)
-                input = layer.learn(input)
-                hebb_loss.append(layer.loss(input))
+                out = layer.learn(input)
+                hebb_loss.append(layer.loss(input, out))
+                input = out
         return input, hebb_loss
 
     def forward(self, input):
@@ -117,8 +118,9 @@ class HebbianNetwork(nn.Module):
         hebb_loss = []
 
         for layer in self.layers:
-            input = layer(input)
-            hebb_loss.append(layer.loss(input))
+            out = layer(input)
+            hebb_loss.append(layer.loss(input, out))
+            input = out
 
         return input, hebb_loss
     

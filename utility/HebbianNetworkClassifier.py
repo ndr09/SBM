@@ -116,17 +116,15 @@ class HebbianNetworkClassifier(hn.HebbianNetwork):
                         #        _ = self.learn(input.to(self.device).unsqueeze(0))
                         #    else:
                         #        output[j - 1, :] = self.learn(input.to(self.device).unsqueeze(0))
-                        output, _ = self.learn(inputs.to(self.device), t.to(self.device))
-                        # if output.grad_fn is None:
+                        output, hebb = self.learn(inputs.to(self.device), t.to(self.device))
+                        # if output.grad_fn is None:
                         #    train_pbar.update(1)
                         #    continue
-                        # if output.grad_fn is None:
-                        #     train_pbar.update(1)
-                        #     continue
+                        
                         output, hebb = self.forward(inputs.to(self.device))
 
                         # _ = loss_fn(output, targets.to(self.device))
-                        loss = loss_fn(output, targets.to(self.device))
+                        loss = loss_fn(output, targets.to(self.device)) # + 0.1 * sum(hebb)
 
                         if i % backprop_every == 0:
                             loss.backward()
@@ -147,8 +145,8 @@ class HebbianNetworkClassifier(hn.HebbianNetwork):
                         if early_stop is not None and i >= early_stop:
                             break
 
-                train_loss.append(epoch_train_loss / total)
-                train_accuracy.append(epoch_train_accuracy / total)
+                train_loss.append(epoch_train_loss / (total ))
+                train_accuracy.append(epoch_train_accuracy / (total ))
 
                 if scheduler is not None:
                     scheduler.step()

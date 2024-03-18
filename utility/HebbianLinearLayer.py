@@ -50,6 +50,7 @@ class HebbianLinearLayer(nn.Module):
         self.train_weights = train_weights
         self.rank = rank
 
+
         # if bias is True, add one to the input features
         self.bias = bias
         if bias: in_features += 1
@@ -60,6 +61,7 @@ class HebbianLinearLayer(nn.Module):
             self.init_neurocentric_params(factory_kwargs=factory_kwargs)
         else: 
             self.init_synapticcentric_params(factory_kwargs=factory_kwargs)
+
 
 
     def init_weights(self, factory_kwargs):
@@ -167,6 +169,7 @@ class HebbianLinearLayer(nn.Module):
     def backward(self, output):
         inverse = torch.pinverse(self.weight.T.clone().detach().cpu()).to(self.device)
         return output @ inverse
+        # return output @ self.weight
     
     def update_weights(self, input, output, targets=None):
         if targets is not None:
@@ -217,13 +220,19 @@ class HebbianLinearLayer(nn.Module):
         # apply the hebbian change in weights
         if self.train_weights:
             self.weight.data = self.weight.data + dw # [in_features, out_features]
+            # positive values to log
+            # self.weight.data = self.weight.data[torch.where(self.weight.data > 0)].log()
+            # self.weight.data = (-self.weight.data[torch.where(self.weight.data < 0)]).log()
+            # self.weight.data = torch.clamp(self.weight.data, -1, 1)
             self.weight.data = self.normalize(self.weight)
-            # # self.weight = (self.eta - 1) * self.weight + self.eta * dw 
+            # self.weight = (self.eta - 1) * self.weight + self.eta * dw 
         else:
             self.weight = self.weight + dw # [in_features, out_features]
+            # self.weight.data[torch.where(self.weight.data >= 0)] = (1 + self.weight.data[torch.where(self.weight.data >= 0)]).log()
+            # self.weight.data[torch.where(self.weight.data < 0)] = -(1 - self.weight.data[torch.where(self.weight.data < 0)]).log()
             self.weight = self.normalize(self.weight)
             # self.weight = self.weight * 0.9 + dw  * 0.1
-            # self.weight = (self.eta - 1) * self.weight + self.eta * dw # [in_features, out_features]
+            #self.weight = (self.eta - 1) * self.weight + self.eta * dw # [in_features, out_features]
 
     def update_weights_hebbian(self, presynaptic, postsynaptic):
         """
@@ -297,7 +306,7 @@ class HebbianLinearLayer(nn.Module):
             return parameter
         
 
-    def loss(self, output):
+    def loss(self, input, output):
         """
         Computes the loss of the layer.
 
@@ -305,16 +314,14 @@ class HebbianLinearLayer(nn.Module):
         :param output: The target of the layer. [batch, out_features]
         :return: The loss of the layer.
         """
-        # the neuron with the maximum similarity for every batch
-        max = torch.max(output, dim=-1)
-        min = torch.min(output, dim=-1)
 
-        # mean without min and max
+        # maximize the similarity between the output and the target
+        # prepost = torch.einsum('bi, bo -> bio', input /(input.norm(dim=1, keepdim=True) + 1e-08), output / (output.norm(dim=1, keepdim=True)+ 1e-08))
+        # get the maximum value of the cosine similarity
+        return 0 #1 - prepost.max(dim=1).values.mean()
 
-        minmax = min.values.mean() - max.values.mean() # push max to higher values and minus to smaller values
+        
 
-        sparsity = torch.mean(torch.abs(output)) # sparsity of the output, the lower the better
-        return minmax #+ 0.01 * sparsity
 
         
 
