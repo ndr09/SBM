@@ -61,7 +61,7 @@ model_size = [784, 256, 128, 10]
 model = HebbianNetworkClassifier(
     model_size, 
     device=device, 
-    init="zero",
+    init="linear",
     dropout=0.1,
     bias=False,
     activation=torch.functional.F.relu,
@@ -72,7 +72,7 @@ model = HebbianNetworkClassifier(
 
 loss_fn = torch.nn.CrossEntropyLoss()
 
-optimizer = torch.optim.AdamW(model.parameters(), lr=0.001, weight_decay=0.01)
+optimizer = torch.optim.AdamW(model.parameters(), lr=0.001, weight_decay=0.)
 scheduler = torch.optim.lr_scheduler.StepLR(optimizer, step_size=3, gamma=0.9)
 
 # print num parameters
@@ -104,7 +104,7 @@ print(f"Test accuracy: {test_accuracy}")
 
 # train only with hebbian
 train_loss, val_loss, test_loss, train_accuracy, val_accuracy, test_accuracy, confusion_matrix = model.hebbian_train_loop(
-    loss_fn, trn_loader, None, test_loader, max_iter=704, log=log, epochs=10, reset=True
+    loss_fn, trn_loader, None, test_loader, max_iter=7004, log=log, epochs=60, reset=True
 ) # used trn_loader instead of train_loader and None instead of val_loader
 
 print(f"Test accuracy hebbian: {test_accuracy}")
