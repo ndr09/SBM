@@ -3,6 +3,8 @@ from torch import nn
 import torch.nn.functional as F
 import math
 from torch.nn import init
+import torchvision
+import numpy as np
 
 
 class HebbianLinearLayer(nn.Module):
@@ -16,6 +18,7 @@ class HebbianLinearLayer(nn.Module):
             activation=F.tanh,
             dtype=torch.float32,
             last_layer=False,
+            first_layer=False,
             init="linear",
             neuron_centric=True,
             use_d=False,
@@ -39,6 +42,7 @@ class HebbianLinearLayer(nn.Module):
         factory_kwargs = {'device': device, 'dtype': dtype}
 
         self.last_layer = last_layer
+        self.first_layer = first_layer
         self.in_features = in_features
         self.out_features = out_features
         self.device = device
@@ -50,7 +54,6 @@ class HebbianLinearLayer(nn.Module):
         self.train_weights = train_weights
         self.rank = rank
 
-
         # if bias is True, add one to the input features
         self.bias = bias
         if bias: in_features += 1
@@ -61,7 +64,6 @@ class HebbianLinearLayer(nn.Module):
             self.init_neurocentric_params(factory_kwargs=factory_kwargs)
         else: 
             self.init_synapticcentric_params(factory_kwargs=factory_kwargs)
-
 
 
     def init_weights(self, factory_kwargs):
@@ -76,38 +78,38 @@ class HebbianLinearLayer(nn.Module):
                 requires_grad=True
             ))
             self.reset(self.weight, init)
-            self.weight.data = self.normalize(self.weight)
+            # self.weight.data = self.normalize(self.weight)
         else:
             # weight is not a parameter, thus it will not appear in the list of parameters of the model
             self.weight = torch.empty(
                 (self.out_features, self.in_features), 
                 **factory_kwargs, 
-                requires_grad=False
+                requires_grad=False,
             )     
             self.reset(self.weight, init) # initialize the weights with a normal distribution
             # normalize the weight so the norm is 1 as it will be in the update_weights method
-            self.weight = self.normalize(self.weight)
+            # self.weight = self.normalize(self.weight)
 
     def init_neurocentric_params(self, factory_kwargs):
             # parameters of the Hebbian learning rule, using nn.Parameter to make them appear in the list of parameters of the model
             self.Ai = nn.Parameter(torch.empty(self.in_features, requires_grad=True, **factory_kwargs))
             self.Bj = nn.Parameter(torch.empty(self.out_features, requires_grad=True, **factory_kwargs))
             self.Ci = nn.ParameterList([
-                nn.Parameter(self.reset(torch.empty(self.in_features, requires_grad=True, **factory_kwargs), 'normal'))
+                nn.Parameter(self.reset(torch.empty(self.in_features, requires_grad=True, **factory_kwargs), 'normal_big'))
                 for _ in range(self.rank)
             ])
             self.Cj = nn.ParameterList([
-                nn.Parameter(self.reset(torch.empty(self.out_features, requires_grad=True, **factory_kwargs), 'normal'))
+                nn.Parameter(self.reset(torch.empty(self.out_features, requires_grad=True, **factory_kwargs), 'normal_big'))
                 for _ in range(self.rank)
             ])
             self.Ei = nn.Parameter(torch.empty(self.in_features, requires_grad=True, **factory_kwargs))
             self.Ej = nn.Parameter(torch.empty(self.out_features, requires_grad=True, **factory_kwargs))
             # since B is used on the output, but used only for the previous layer, I can set it directly here
-            self.eta = nn.Parameter(torch.ones(1, requires_grad=True, **factory_kwargs) * 0.01)
+            # self.eta = nn.Parameter(torch.ones(1, requires_grad=True, **factory_kwargs) * 0.01)
 
             # initialize the parameters with the given distribution
-            self.reset(self.Ai, 'normal')
-            self.reset(self.Bj, 'normal')
+            self.reset(self.Ai, 'normal_small')
+            self.reset(self.Bj, 'normal_small')
             self.reset(self.Ei, 'normal')
             self.reset(self.Ej, 'normal')
 
@@ -117,19 +119,19 @@ class HebbianLinearLayer(nn.Module):
                 self.reset(self.Di, 'normal_small')
                 self.reset(self.Dj, 'normal_small')
 
+
     def init_synapticcentric_params(self, factory_kwargs):
         # parameters of the Hebbian learning rule, using nn.Parameter to make them appear in the list of parameters of the model
         self.Ai = nn.Parameter(torch.empty((self.in_features, self.out_features), requires_grad=True, **factory_kwargs))
         self.Bj = nn.Parameter(torch.empty((self.in_features, self.out_features), requires_grad=True, **factory_kwargs))
         self.C = nn.Parameter(torch.empty((self.in_features, self.out_features), requires_grad=True, **factory_kwargs))
-        self.E = nn.Parameter(torch.empty((self.in_features, self.out_features), requires_grad=True, **factory_kwargs))
-            
-        self.eta = nn.Parameter(torch.ones(1, requires_grad=True, **factory_kwargs) * 0.01)
+        self.E = nn.Parameter(torch.empty((self.in_features, self.out_features), requires_grad=True, **factory_kwargs))   
+        # self.eta = nn.Parameter(torch.ones(1, requires_grad=True, **factory_kwargs) * 0.01)
 
         # initialize the parameters with the given distribution
         self.reset(self.Ai, 'normal')
         self.reset(self.Bj, 'normal')
-        self.reset(self.E, 'normal_small')
+        self.reset(self.E, 'normal')
         if self.use_d:
             self.D = nn.Parameter(torch.empty((self.in_features, self.out_features), requires_grad=True, **factory_kwargs))
             self.reset(self.D, 'normal')
@@ -139,19 +141,27 @@ class HebbianLinearLayer(nn.Module):
         """
         Performs a forward pass through the layer, learning the weights with Hebbian learning.
         """
+        # if there are zeros in self.initialized_weights, it means the weights have not been initialized
+        # self.init_if_needed(input)
+
         # calculate the output of the layer
         out = F.linear(input, self.weight)
+        
+        if targets is not None and self.last_layer:
+            # update the weights
+            self.update_weights_hebbian(input, targets)
+        else:
+            self.update_weights_hebbian(input, self.activation(out))
 
-        # update the weights
-        self.update_weights(input, out, targets=targets)
+        out = F.linear(input, self.weight)
 
         # apply the activation function only if this is not the last layer
         # for optimal convergence properties given the Cross-Entropy loss
         if not self.last_layer:
             out = self.activation(out)
         
-        return out
-
+        return out, self.loss(input, out)
+    
     def forward(self, input):
         """
         Performs a forward pass through the layer, without learning the weights.
@@ -164,18 +174,7 @@ class HebbianLinearLayer(nn.Module):
         if not self.last_layer:
             out = self.activation(out)
 
-        return out
-    
-    def backward(self, output):
-        inverse = torch.pinverse(self.weight.T.clone().detach().cpu()).to(self.device)
-        return output @ inverse
-        # return output @ self.weight
-    
-    def update_weights(self, input, output, targets=None):
-        if targets is not None:
-            self.update_weights_hebbian(self.activation(input), self.activation(targets))
-        else:
-            self.update_weights_hebbian(self.activation(input), self.activation(output))
+        return out, self.loss(input, out)
                 
     def calculate_A(self, presynaptic):
         if self.neuron_centric:
@@ -193,17 +192,13 @@ class HebbianLinearLayer(nn.Module):
     def calculate_C(self, presynaptic, postsynaptic):
         if self.neuron_centric:
             prepost = torch.einsum('bi, bo -> bio', presynaptic, postsynaptic) # [batch, in_features, out_features] -> batched outer product
-            
-            # CiCj = self.Ci[0].unsqueeze(1) + self.Cj[0].unsqueeze(0)
             CiCj = torch.zeros((self.in_features, self.out_features), device=self.device, dtype=self.dtype)
             for i in range(len(self.Ci)): CiCj = CiCj + torch.einsum('i, o -> io', self.Ci[i], self.Cj[i])
-            
             C = torch.einsum('io, bio -> bio', CiCj, prepost) # [batch, in_features, out_features], batched outer product
             return C
         else:
             return torch.einsum('io, bi, bo -> bio', self.C, presynaptic, postsynaptic)
-
-
+        
     def calculate_D(self):
         if self.neuron_centric:
             return torch.einsum('i, o -> io', self.Di, self.Dj).unsqueeze(0)
@@ -219,47 +214,51 @@ class HebbianLinearLayer(nn.Module):
     def apply_dw(self, dw):
         # apply the hebbian change in weights
         if self.train_weights:
-            self.weight.data = self.weight.data + dw # [in_features, out_features]
-            # positive values to log
-            # self.weight.data = self.weight.data[torch.where(self.weight.data > 0)].log()
-            # self.weight.data = (-self.weight.data[torch.where(self.weight.data < 0)]).log()
-            # self.weight.data = torch.clamp(self.weight.data, -1, 1)
+            self.weight.data = self.weight.data + dw / dw.norm() # [in_features, out_features]
             self.weight.data = self.normalize(self.weight)
-            # self.weight = (self.eta - 1) * self.weight + self.eta * dw 
         else:
-            self.weight = self.weight + dw # [in_features, out_features]
-            # self.weight.data[torch.where(self.weight.data >= 0)] = (1 + self.weight.data[torch.where(self.weight.data >= 0)]).log()
-            # self.weight.data[torch.where(self.weight.data < 0)] = -(1 - self.weight.data[torch.where(self.weight.data < 0)]).log()
+            self.weight = self.weight + dw / dw.norm()# [in_features, out_features]
             self.weight = self.normalize(self.weight)
-            # self.weight = self.weight * 0.9 + dw  * 0.1
-            #self.weight = (self.eta - 1) * self.weight + self.eta * dw # [in_features, out_features]
 
     def update_weights_hebbian(self, presynaptic, postsynaptic):
         """
         Updates the weights of the layer with the Neuro-centric Hebbian learning rule.
         
-        :param presynaptic: The presynaptic activations (input of the layer).
-        :param postsynaptic: The postsynaptic activations (output of the layer).
+        :param presynaptic: The presynaptic activations (input of the layer). [batch, in_features]
+        :param postsynaptic: The postsynaptic activations (output of the layer). [batch, out_features]
         """
+        # topk = max(self.out_features // 15, 1)
+        # prob = torch.functional.F.softmax(postsynaptic, dim=1)
+        # winner_neuron = torch.multinomial(prob, topk)
+        # mask = torch.zeros_like(postsynaptic)
+        # mask = mask.scatter(1, winner_neuron, 1)
+        # postsynaptic = mask * postsynaptic
+
+
         A = self.calculate_A(presynaptic)
         B = self.calculate_B(postsynaptic)
         C = self.calculate_C(presynaptic, postsynaptic)
-    
+        
         eta = self.calculate_eta()
 
         abcd = A + B + C
         if self.use_d: abcd = abcd + self.calculate_D()
 
-        dw = (eta * abcd).sum(dim=0).T
+        dw = (eta*abcd).sum(dim=0).T
         self.apply_dw(dw)
 
     def normalize(self, tensor):
         """
         Normalizes the tensor with the L2 norm.
         """
+        # return tensor / tensor.std(dim=-1, keepdim=True)
         # return tensor / torch.max(torch.abs(tensor))
         return F.normalize(tensor, p=2, dim=-1)
-       #  return tensor / ( torch.max(torch.abs(tensor), dim=-1, keepdim=True).values + 1e-8)
+        # return tensor / ( torch.max(torch.abs(tensor), dim=-1, keepdim=True).values + 1e-8)
+        # max_value = torch.max(torch.abs(tensor))
+        # l2_penalty = (tensor) ** 2 * torch.sign(tensor)
+        # l2_penalty = (l2_penalty / torch.max(torch.abs(l2_penalty))) * max_value
+        # return tensor - l2_penalty * 0.1
 
     def reset_weights(self, init="maintain"):
         """
@@ -308,22 +307,24 @@ class HebbianLinearLayer(nn.Module):
 
     def loss(self, input, output):
         """
-        Computes the loss of the layer.
+        Calculates the loss of the layer.
 
-        :param input: The input of the layer. [batch, in_features]
-        :param output: The target of the layer. [batch, out_features]
+        :param input: The input of the layer.
+        :param targets: The targets of the layer.
         :return: The loss of the layer.
         """
+        mse_loss = 0
+        if self.first_layer:
+            # reconstruction loss
+            mse = nn.MSELoss()
+            topk = 5
+            _, topk_idx = torch.topk(output, topk, dim=-1)
+            neurons = self.weight[topk_idx]
+            mse_loss = mse(neurons, input.unsqueeze(1).repeat(1, topk, 1))
 
-        # maximize the similarity between the output and the target
-        # prepost = torch.einsum('bi, bo -> bio', input /(input.norm(dim=1, keepdim=True) + 1e-08), output / (output.norm(dim=1, keepdim=True)+ 1e-08))
-        # get the maximum value of the cosine similarity
-        return 0 #1 - prepost.max(dim=1).values.mean()
+        return mse_loss 
 
-        
+            
 
-
-        
-
-        
+            
         

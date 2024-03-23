@@ -24,7 +24,7 @@ class HebbianNetworkClassifier(hn.HebbianNetwork):
             use_d=False,
             rank=1,
             train_weights=False,
-            use_tatgets=False
+            use_tatgets=False,
     ):
         """
         Initializes the HebbianNetworkClassifier.
@@ -65,6 +65,7 @@ class HebbianNetworkClassifier(hn.HebbianNetwork):
             scheduler=None, 
             log=False, 
             reset_every=1, 
+            reset_every_batch=None,
             early_stop=None, 
             backprop_every=1
         ):
@@ -115,22 +116,26 @@ class HebbianNetworkClassifier(hn.HebbianNetwork):
                         #    if j == 0:
                         #        _ = self.learn(input.to(self.device).unsqueeze(0))
                         #    else:
-                        #        output[j - 1, :] = self.learn(input.to(self.device).unsqueeze(0))
-                        output, hebb = self.learn(inputs.to(self.device), t.to(self.device))
-                        # if output.grad_fn is None:
-                        #    train_pbar.update(1)
-                        #    continue
+                        #        output[j - 1, :], _ = self.learn(input.to(self.device).unsqueeze(0))
+                        output, hebb_loss = self.learn(inputs.to(self.device), t.to(self.device))
+                        if output.grad_fn is None:
+                            train_pbar.update(1)
+                            continue
                         
-                        output, hebb = self.forward(inputs.to(self.device))
+                        # output, _ = self.forward(inputs.to(self.device))
 
                         # _ = loss_fn(output, targets.to(self.device))
-                        loss = loss_fn(output, targets.to(self.device)) # + 0.1 * sum(hebb)
+                        loss = loss_fn(output, targets.to(self.device)) # + hebb_loss
 
                         if i % backprop_every == 0:
                             loss.backward()
                             optimizer.step()
                             optimizer.zero_grad()
-                            self.reset_weights('mantain')
+
+                            if reset_every_batch is not None and i % reset_every_batch == 0:
+                                self.reset_weights(self.init)
+                            else:
+                               self.reset_weights('mantain')
 
                         epoch_train_loss += loss.item()
                         train_pbar.update(1)
@@ -159,7 +164,7 @@ class HebbianNetworkClassifier(hn.HebbianNetwork):
                     with torch.no_grad():
                         for inputs, targets in val_dataloader:
                             # _ = self.learn(inputs.to(self.device))
-                            output, _ = self.forward(inputs.to(self.device))
+                            output, hebb_loss = self.forward(inputs.to(self.device))
 
                             loss = loss_fn(output, targets.to(self.device))
                             epoch_val_loss += loss.item()
@@ -257,7 +262,7 @@ class HebbianNetworkClassifier(hn.HebbianNetwork):
                             with tqdm(total=len(val_dataloader), desc='Validation', unit='batch', leave=False) as val_pbar:
                                 with torch.no_grad():
                                     for inputs, targets in val_dataloader:
-                                        # _ = self.learn(inputs.to(self.device))
+                                        _ = self.learn(inputs.to(self.device))
                                         output, _ = self.forward(inputs.to(self.device))
 
                                         loss = loss_fn(output, targets.to(self.device))

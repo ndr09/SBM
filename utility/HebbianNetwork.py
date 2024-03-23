@@ -6,6 +6,7 @@ import queue
 from torch.nn import functional as F
 import numpy as np
 import torchvision.transforms.functional as TF
+import torchvision
 
 class HebbianNetwork(nn.Module):
 
@@ -51,6 +52,7 @@ class HebbianNetwork(nn.Module):
                 layers[i], layers[i + 1], 
                 device=device, 
                 last_layer=last_layer, 
+                first_layer=(i == 0),
                 bias=bias, 
                 activation=activation, 
                 dtype=torch.float32,
@@ -71,6 +73,9 @@ class HebbianNetwork(nn.Module):
         if len(input.shape) == 1:
             input = input.unsqueeze(0)
 
+        gaussian_filter = torchvision.transforms.GaussianBlur(5, sigma=(1.0, 1.0))
+        input = gaussian_filter(input)
+
         if len(input.shape) == 3 or len(input.shape) == 4:
             input = input.reshape(input.shape[0], -1)
 
@@ -82,48 +87,33 @@ class HebbianNetwork(nn.Module):
         """
         Forward pass through the network, learning the weights with Hebbian learning.
         """
-        # add gaussian blur to the input
-        
-        # input = nn.AvgPool2d(7, stride=1, padding=3)(input)
         input = self.reshape_input(input)
-        input = self.activation(input)
-        hebb_loss = []
-
-        if self.use_targets:            
-            old_input = input
-            for i in range(len(self.layers)):
-                input = self.dropout(input)
-                out = self.layers[i].forward(input)
-                if i > 0:
-                    # calculate the inverse
-                    inv_out = self.layers[i].backward(out)
-                    self.layers[i - 1].update_weights(old_input, inv_out)
-                    old_input = input
-                if i == len(self.layers) - 1:
-                    self.layers[i].update_weights(input, out, targets)
-                input = out
-        else:
-            for layer in self.layers:
-                input = self.dropout(input)
-                out = layer.learn(input)
-                hebb_loss.append(layer.loss(input, out))
-                input = out
-        return input, hebb_loss
+        hebb_losses = []
+    
+        for layer in self.layers:
+            input = self.dropout(input)
+            if layer.last_layer and targets is not None and self.use_targets:
+                out, loss = layer.learn(input, targets)
+            else:
+                out, loss = layer.learn(input)
+            input = out
+            hebb_losses.append(loss)
+        return input, sum(hebb_losses)
 
     def forward(self, input):
         """
         Forward pass through the network, without learning the weights.
         """
         input = self.reshape_input(input)
-        hebb_loss = []
+        hebb_losses = []
 
         for layer in self.layers:
-            out = layer(input)
-            hebb_loss.append(layer.loss(input, out))
+            out, loss = layer(input)
+            hebb_losses.append(loss)
             input = out
 
-        return input, hebb_loss
-    
+        return input, sum(hebb_losses)
+        
     def reset_weights(self, init='uni'):
         """
         Resets the weights of the network.
@@ -131,34 +121,3 @@ class HebbianNetwork(nn.Module):
         """
         for layer in self.layers:
             layer.reset_weights(init)
-    
-    def get_weights(self):
-        """
-        Returns the weights of the network.
-        """
-        tmp = {}
-        for i, layer in enumerate(self.layers):
-            tmp[i] = layer.weight.clone().detach().to(self.device)
-        return tmp
-    
-    def set_weights(self, weights):
-        """
-        Sets the weights of the network.
-        """
-        for i, layer in enumerate(self.layers):
-            layer.weight = weights[i].clone().detach().to(self.device)
-
-    def get_flatten_params(self):
-        """
-        Returns the parameters of the network as a single tensor.
-        """
-        return torch.cat([p.view(-1).clone().detach() for p in self.parameters()])
-
-    def set_params_flatten(self, flat_params):
-        """
-        Sets the parameters of the network from a single tensor.
-        """
-        idx = 0
-        for p in self.parameters():
-            p.data = flat_params[idx:idx + p.numel()].view(p.size()).clone().detach().to(self.device)
-            idx += p.numel()
