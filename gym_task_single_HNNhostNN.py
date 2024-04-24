@@ -3,13 +3,13 @@ import gymnasium as gym
 import numpy as np
 import functools
 from random import Random
-from multiprocessing import Pool, Manager
+from multiprocessing import Pool
 import pickle
 import sys
 import os
 import math
 from plot_utils import plot_generations, plot_weights, plot_weights_gif
-from hostNN import HostSingleNN
+from HNNhostNN import HNNHostSingleNN
 
 # training an NN, called HostMultipleNN, that works with other NNs, each deciding a weight the host
 
@@ -17,16 +17,17 @@ from hostNN import HostSingleNN
 def eval_singleNN(ds, render=False):
 
     x = ds[0]
-    hostNodes = ds[1]
-    guestNodes = ds[2]
-    inputType = ds[3]
-    updateType = ds[4]
-    
+    hnodes = ds[1]
+    pruning_rate = ds[2]
+    hostNodes = ds[3]
+    guestNodes = ds[4]
+    inputType = ds[5]
+
     cumulative_rewards = []
     weights = []
 
     task = gym.make("CartPole-v1")
-    agent = HostSingleNN(hostNodes, guestNodes, inputType, updateType)
+    agent = HNNHostSingleNN(hostNodes, guestNodes, inputType)
 
     agent.set_guest_weights(x)
 
@@ -37,7 +38,7 @@ def eval_singleNN(ds, render=False):
         obs, info = task.reset(seed=i, options={})
         counter = 0
 
-        agent.compute_host_weights()
+        agent.compute_h_rules()
 
         # add weights to dict for plotting
         weights.append(agent.get_list_weights())
@@ -50,6 +51,8 @@ def eval_singleNN(ds, render=False):
                 task.render()
             obs, rew, terminated, truncated, info = task.step(np.argmax(output))
             cumulative_rewards[-1] += rew
+
+            agent.update_weights()
 
             done = terminated or truncated
         counter += 1
@@ -71,38 +74,39 @@ def generator_wrapper(func):
     return _generator
 
 # multiprocessing
-def parallel_val_singleNN(candidates, hostNodes, guestNodes, inputType, updateType):
-
+def parallel_val_singleNN(candidates, hnodes, pr_ratio, hostNodes, guestNodes, inputType):
     with Pool(20) as p:
         # executes one eval foreach candidate
-        x = p.map(eval_singleNN, [[c, hostNodes, guestNodes, inputType, updateType] for c in candidates])
-
-        #split the fitness values and the weights of the host
-        return list(zip(*x))[0], list(zip(*x))[1]
+        x = p.map(eval_singleNN, [[c, hnodes, pr_ratio, hostNodes, guestNodes, inputType] for c in candidates])
+    #split the fitness values and the weights of the host
+    return list(zip(*x))[0], list(zip(*x))[1]
 
 
 def experiment_launcher_singleNN(config):
     seed = config["seed"]
+    hnodes = config["hnodes"]
+    pr_ratio = config["pr_ratio"]
 
     # get the characteristics of the NN
     hostNodes = config["hostNodes"]
     guestNodes = config["guestNodes"]
     inputType = config["inputType"]
-    updateType = config["updateType"]
 
     # archives
     means = []
     bests = []
+    final_weights = dict()
 
     args = {}
-    fka = HostSingleNN(hostNodes, guestNodes, inputType, updateType)
+    fka = HNNHostSingleNN(hostNodes, guestNodes, inputType)
 
     args["num_vars"] = fka.guestnWeights # Number of dimensions of the search space
     args["max_generations"] = config["max_generations"]
     args["sigma"] = 1.0  # default standard deviation
-    args["num_offspring"] = 30 #4 + int(math.floor(3 * math.log(fka.nweights)))  # lambda
-    args["pop_size"] = 15 #int(math.floor(args["num_offspring"] / 2))  # mu
+    args["num_offspring"] = 50 #4 + int(math.floor(3 * math.log(fka.nweights)))  # lambda
+    args["pop_size"] = 10 #int(math.floor(args["num_offspring"] / 2))  # mu
     args["pop_init_range"] = [-1, 1]  # Range for the initial population
+    args["hnodes"] = hnodes
     args["seed"] = seed
 
 
@@ -112,16 +116,15 @@ def experiment_launcher_singleNN(config):
                {'popsize': args["num_offspring"],
                 'seed': seed,
                 'CMA_mu': args["pop_size"]})
-    gen = 0
-    logs = []
-    final_weights = dict()
-
+    
     best = [0,0,0]
     worst = [0,0,-500]
 
+    gen = 0
+    logs = []
     while gen <= args["max_generations"]:
         candidates = es.ask()  # get list of new solutions
-        fitnesses, all_weights = parallel_val_singleNN(candidates, hostNodes, guestNodes, inputType, updateType)
+        fitnesses, all_weights = parallel_val_singleNN(candidates, hnodes, pr_ratio, hostNodes, guestNodes, inputType)
         final_weights[gen] = all_weights
         print("generation "+str(gen)+"  "+str(fitnesses)+"  "+str(np.mean(fitnesses)))
 
@@ -141,40 +144,35 @@ def experiment_launcher_singleNN(config):
 
         es.tell(candidates, fitnesses)
         gen += 1
-
-    final_pop = np.asarray(es.ask())
-    parallel_res, all_weights = parallel_val_singleNN(candidates, hostNodes, guestNodes, inputType, updateType)
+    #final_pop = np.asarray(es.ask())
+    parallel_res, all_weights = parallel_val_singleNN(candidates, hnodes, pr_ratio, hostNodes, guestNodes, inputType)
     final_weights[gen] = all_weights
     final_pop_fitnesses = np.asarray(parallel_res)
 
     best_guy = es.best.x
     best_fitness = es.best.f
 
-    pickle_data = {"type": "single", "hostNodes": hostNodes, "guestNodes": guestNodes, "inputType": inputType, "updateType": updateType, "candidate": best_guy}
+    pickle_data = {"type": "HNNsingle", "hostNodes": hostNodes, "guestNodes": guestNodes, "inputType": inputType, "candidate": best_guy}
 
-    with open("pkl/host_single_hostNN_"+str(best_fitness)+".pkl", "wb") as f:
+    with open("pkl/host_single_HNNhostNN_"+str(best_fitness)+".pkl", "wb") as f:
         pickle.dump(pickle_data, f)
 
     return means, bests, final_weights, best, worst
 
 
 if __name__ == "__main__":
+    
     HostNodes = [4, 4, 2]
-    GuestNodes =  [3, 3, 1]
-    inputType = "ID" #["IDA", "ID", "A", "IDL"]
-    updateType = "deltaW"
+    GuestNodes =  [2, 3, 4]
+    inputType = "ID" # @param ["IDA", "ID", "A", "IDAW", "IDAL"]
 
     seed = 0
-    means, bests, all_weights, best, worst = experiment_launcher_singleNN({"seed": seed, "hostNodes": HostNodes, "guestNodes": GuestNodes, 
-                                                                           "inputType": inputType, "updateType": updateType,
-                                                                           "max_generations": 50})
+    means, bests, all_weights, best, worst = experiment_launcher_singleNN({"seed": seed, "hnodes": 5, "pr_ratio": 30,
+                         "hostNodes": HostNodes, "guestNodes": GuestNodes, "inputType": inputType,
+                         "max_generations": 2})
+
 
     plot_generations('Cartpole - Single NN compute W', means, bests)
     # plot worst
     plot_weights(all_weights, HostNodes, worst[0], worst[1], "Worst")
     plot_weights(all_weights, HostNodes, best[0], best[1], "Best")
-
-    # plot best - could take come time
-    # ani = plot_weights_gif(all_weights, HostNodes, best[0], best[1], "Best")
-    # ani.save('animation.gif', writer='imagemagick', fps=30)
-

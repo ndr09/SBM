@@ -1,17 +1,12 @@
-# Self BuildingNeural Network
----
-The self-building NN has a mechanism that allows it to grow and prune its connection at runtime. 
-They achieve this using a plasticity model (Hebbian Learning) and a pruning algorithm. 
+# HostNN Learning
 
----
 # Usage
-The following code initializes an SBNN with 2 inputs, 5 hidden nodes, and 3 outputs, Using $\eta=0.1$ and pruning ratio $pr=40%$.
-Note that the last two parameters refer to the random activation order, the first is the seed, and the second refers to the use of a random activation order, before the pruning.
 
-```
-from network import SBM
-sbnn = SBM([2,5,3], 40, 0.1, 0, True) 
-```
+The repository contains two example files, namely `gym_task_single_hostNN.py` and `gym_task_multiple_hostNN.py`, which demonstrate the usage of the classes provided in the package. Running either of these files will execute the example code and save a pickle file consisting of the weights of the best individual discovered by CMA-ES.
+
+After the neural networks have been trained, use the `val_host_nn.py` file to execute them. Before execution, modify the path of the pickle file containing all the information about the neural network, including its type, structure, etc.
+
+This also applies similarly to the **HNNhost** counterpart.
 
 ---
 # Citing
