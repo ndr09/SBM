@@ -6,7 +6,7 @@ import numpy as np
 import functools
 import pickle
 from multiprocessing import Pool
-from SBM.common.network5 import ND_SBM
+from SBM.common.network import ND_SBM
 import json
 
 from SBM.common.optimizer import ES1
@@ -20,7 +20,7 @@ def eval(data):
 
     agent = ND_SBM(args["nodes"], prune_ratio=args["pr"], seed=args['seed'])
     agent.set_hrules(x)
-    obs, info = task.reset()
+    obs, info = task.reset(seed=0)
     done = False
     truncated = False
     rew_ep = 0
@@ -57,7 +57,7 @@ def parallel_val(candidates, args):
     with Pool() as p:
         return p.map(eval, [[c, json.loads(json.dumps(args))] for c in candidates])
     # res = [eval([c, json.loads(json.dumps(args))]) for c in candidates]
-    # return res
+    return res
 
 
 def experiment_launcher(config):
@@ -66,7 +66,7 @@ def experiment_launcher(config):
     print(config)
     fka = ND_SBM(config["nodes"], 0, 0)
     args = config
-    args["generations"] = 1000
+    args["generations"] = 100
     args["num_vars"] = fka.nparams  # Number of dimensions of the search space
     print("this problem has " + str(args["num_vars"]) + " parameters")
     args["seed"] = seed
@@ -113,18 +113,18 @@ if __name__ == "__main__":
 
     args = {"seed": seed,
             "task": task}
-    for hnodes in [100, 200, 300]:
-        for pr in [0, 40, 60, 80, 90, 99]:
-            for ps in [2, 200, 400, 600, 800]:
-                if not chs(os.path.join("RQ2", "DSBM", args["task"], str(hnodes), str(pr), str(ps), str(seed))):
-                    args["dir"] = os.path.join("RQ2","DSBM", args["task"], str(hnodes), str(pr), str(ps), str(seed))
+    for hnodes in [100]:
+        for pr in [0, 60, 90, 99]:
+            for ps in [2, 400, 800]:
+                if not chs(os.path.join("RQ2", "NDSBM", args["task"], str(hnodes), str(pr), str(ps), str(seed))):
+                    args["dir"] = os.path.join("RQ2","NDSBM", args["task"], str(hnodes), str(pr), str(ps), str(seed))
 
-                    os.makedirs(os.path.join("RQ2", "DSBM"), exist_ok=True)
-                    os.makedirs(os.path.join("RQ2", "DSBM", task), exist_ok=True)
-                    os.makedirs(os.path.join("RQ2", "DSBM", task, str(hnodes)), exist_ok=True)
-                    os.makedirs(os.path.join("RQ2", "DSBM", task, str(hnodes), str(pr)), exist_ok=True)
-                    os.makedirs(os.path.join("RQ2", "DSBM", task, str(hnodes), str(pr), str(ps)), exist_ok=True)
-                    os.makedirs(os.path.join("RQ2", "DSBM", task, str(hnodes), str(pr), str(ps), str(seed)),
+                    os.makedirs(os.path.join("RQ2", "NDSBM"), exist_ok=True)
+                    os.makedirs(os.path.join("RQ2", "NDSBM", task), exist_ok=True)
+                    os.makedirs(os.path.join("RQ2", "NDSBM", task, str(hnodes)), exist_ok=True)
+                    os.makedirs(os.path.join("RQ2", "NDSBM", task, str(hnodes), str(pr)), exist_ok=True)
+                    os.makedirs(os.path.join("RQ2", "NDSBM", task, str(hnodes), str(pr), str(ps)), exist_ok=True)
+                    os.makedirs(os.path.join("RQ2", "NDSBM", task, str(hnodes), str(pr), str(ps), str(seed)),
                                 exist_ok=True)
 
                     taskinfo = {"Ant": [27, 8],
@@ -137,3 +137,4 @@ if __name__ == "__main__":
                     args['ps'] = ps
                     experiment_launcher(args)
                     print("ended experiment " + str(args))
+

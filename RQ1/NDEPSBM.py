@@ -6,7 +6,7 @@ import numpy as np
 import functools
 import pickle
 from multiprocessing import Pool
-from SBM.common.network5 import NDEP_SBM
+from SBM.common.network import NDEP_SBM
 import json
 
 from SBM.common.optimizer import ES1
@@ -21,27 +21,31 @@ def eval(data):
 
     agent = NDEP_SBM(args["nodes"], prune_ratio=args["pr"], seed=args['seed'])
 
-    pp = [1.0 / (1.0 + np.exp(-v)) for v in x[:sum(agent.nodes[1:])]]
+    pp = [1.0 / (1.0 + np.exp(-v)) for v in x[:sum(agent.nodes[1:])*2]]
     for i in range(1, len(pp), 2):
-        pp[i] *= 1000
-    hr = x[sum(agent.nodes[1:]):]
+        pp[i] *= 100
+    hr = x[sum(agent.nodes[1:])*2:]
     agent.set_hrules(hr)
     agent.set_prune_rules(pp)
-    obs, info = task.reset()
+    obs, info = task.reset(seed=0)
     done = False
     truncated = False
     rew_ep = 0
     t = 0
     rews = []
     for i in range(100):
+        rew_ep= 0
         while not (done or truncated):
             output = agent.activate(obs)
             obs, rew, done, truncated, info = task.step(np.argmax(output))
 
             rew_ep += rew
             t += 1
+        if done or truncated:
+            observation, info = task.reset(seed=i + 1)
+            done, truncated = False, False
         rews.append(rew_ep)
-        task.reset(seed=i + 1)
+        
     task.close()
 
     return np.mean(rews)
@@ -122,18 +126,18 @@ if __name__ == "__main__":
 
     args = {"seed": seed,
             "task": task}
-    for hnodes in [5, 6, 7, 8, 9]:
-        for pr in [0, 40, 60, 80, 90, 99]:
-            for ps in [2, 20, 40, 60, 80]:
-                if not chs(os.path.join("RQ1", "NDEPSBM", args["task"], str(hnodes), str(pr), str(ps), str(seed))):
-                    args["dir"] = os.path.join("RQ1", "NDEPSBM", args["task"], str(hnodes), str(pr), str(ps), str(seed))
+    for hnodes in [2,3,4]:
+        for pr in [0]:
+            for ps in [2]:
+                if not chs(os.path.join("RQ1", "NDEPSBM3", args["task"], str(hnodes), str(pr), str(ps), str(seed))):
+                    args["dir"] = os.path.join("RQ1", "NDEPSBM3", args["task"], str(hnodes), str(pr), str(ps), str(seed))
 
-                    os.makedirs(os.path.join("RQ1", "NDEPSBM"), exist_ok=True)
-                    os.makedirs(os.path.join("RQ1", "NDEPSBM", task), exist_ok=True)
-                    os.makedirs(os.path.join("RQ1", "NDEPSBM", task, str(hnodes)), exist_ok=True)
-                    os.makedirs(os.path.join("RQ1", "NDEPSBM", task, str(hnodes), str(pr)), exist_ok=True)
-                    os.makedirs(os.path.join("RQ1", "NDEPSBM", task, str(hnodes), str(pr), str(ps)), exist_ok=True)
-                    os.makedirs(os.path.join("RQ1", "NDEPSBM", task, str(hnodes), str(pr), str(ps), str(seed)),
+                    os.makedirs(os.path.join("RQ1", "NDEPSBM3"), exist_ok=True)
+                    os.makedirs(os.path.join("RQ1", "NDEPSBM3", task), exist_ok=True)
+                    os.makedirs(os.path.join("RQ1", "NDEPSBM3", task, str(hnodes)), exist_ok=True)
+                    os.makedirs(os.path.join("RQ1", "NDEPSBM3", task, str(hnodes), str(pr)), exist_ok=True)
+                    os.makedirs(os.path.join("RQ1", "NDEPSBM3", task, str(hnodes), str(pr), str(ps)), exist_ok=True)
+                    os.makedirs(os.path.join("RQ1", "NDEPSBM3", task, str(hnodes), str(pr), str(ps), str(seed)),
                                 exist_ok=True)
 
                     taskinfo = {"MountainCar": [2, 3],

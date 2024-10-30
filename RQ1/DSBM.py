@@ -7,7 +7,7 @@ from SBM.common.optimizer import *
 import gymnasium as gym
 import numpy as np
 
-from SBM.common.network5 import D_SBM
+from SBM.common.network import D_SBM
 
 
 def eval(data):
@@ -19,13 +19,14 @@ def eval(data):
 
     agent = D_SBM(args["nodes"], prune_ratio=args["pr"], seed=args['seed'])
     agent.set_hrules(x)
-    obs, info = task.reset()
+    obs, info = task.reset(seed=0)
     done = False
     truncated = False
     rew_ep = 0
     t = 0
     rews = []
     for i in range(100):
+        rew_ep = 0
         while not (done or truncated):
             output = agent.activate(obs)
             obs, rew, done, truncated, info = task.step(np.argmax(output))
@@ -34,8 +35,11 @@ def eval(data):
             if t == args['ps']:
                 agent.prune_weights()
             t += 1
+        if done or truncated:
+            observation, info = task.reset(seed=i + 1)
+            done, truncated = False, False
         rews.append(rew_ep)
-        task.reset(seed=i + 1)
+
     task.close()
 
     return np.mean(rews)
@@ -117,15 +121,15 @@ if __name__ == "__main__":
     for hnodes in [5,6,7,8,9]:
         for pr in [0, 40, 60, 80, 90,99]:
             for ps in [2, 20, 40, 60, 80]:
-                if not chs(os.path.join("RQ1", "DSBM", args["task"], str(hnodes), str(pr), str(ps), str(seed))):
-                    args["dir"] = os.path.join("RQ1","DSBM", args["task"], str(hnodes), str(pr), str(ps), str(seed))
+                if not chs(os.path.join("RQ1", "DSBM2", args["task"], str(hnodes), str(pr), str(ps), str(seed))):
+                    args["dir"] = os.path.join("RQ1","DSBM2", args["task"], str(hnodes), str(pr), str(ps), str(seed))
 
-                    os.makedirs(os.path.join("RQ1", "DSBM"), exist_ok=True)
-                    os.makedirs(os.path.join("RQ1", "DSBM", task), exist_ok=True)
-                    os.makedirs(os.path.join("RQ1", "DSBM", task, str(hnodes)), exist_ok=True)
-                    os.makedirs(os.path.join("RQ1", "DSBM", task, str(hnodes), str(pr)), exist_ok=True)
-                    os.makedirs(os.path.join("RQ1", "DSBM", task, str(hnodes), str(pr), str(ps)), exist_ok=True)
-                    os.makedirs(os.path.join("RQ1", "DSBM", task, str(hnodes), str(pr), str(ps), str(seed)),
+                    os.makedirs(os.path.join("RQ1", "DSBM2"), exist_ok=True)
+                    os.makedirs(os.path.join("RQ1", "DSBM2", task), exist_ok=True)
+                    os.makedirs(os.path.join("RQ1", "DSBM2", task, str(hnodes)), exist_ok=True)
+                    os.makedirs(os.path.join("RQ1", "DSBM2", task, str(hnodes), str(pr)), exist_ok=True)
+                    os.makedirs(os.path.join("RQ1", "DSBM2", task, str(hnodes), str(pr), str(ps)), exist_ok=True)
+                    os.makedirs(os.path.join("RQ1", "DSBM2", task, str(hnodes), str(pr), str(ps), str(seed)),
                                 exist_ok=True)
 
                     taskinfo = {"MountainCar": [2, 3],

@@ -6,7 +6,7 @@ import numpy as np
 import functools
 import pickle
 from multiprocessing import Pool
-from SBM.common import TSBM as SBM
+from SBM.common.network import TSBM
 import json
 
 from SBM.common.optimizer import ES1
@@ -19,25 +19,27 @@ def eval(data):
     taskName = args["task"] + ("-v2" if args["task"].startswith("Lunar") else "-v0")
     task = gym.make(taskName)
 
-    agent = SBM(args["nodes"], prune_ratio=args["pr"], seed=args['seed'])
+    agent = TSBM(args["nodes"], eta=0.01, prune_ratio=args["pr"], seed=args['seed'], random=False)
     agent.set_hrules(x)
-    obs, info = task.reset()
+    obs, info = task.reset(seed=0)
     done = False
     truncated = False
     rew_ep = 0
     t = 0
     rews = []
     for i in range(100):
+        rew_ep= 0
         while not (done or truncated):
             output = agent.activate(obs)
             obs, rew, done, truncated, info = task.step(np.argmax(output))
 
             rew_ep += rew
-            if t == args['ps']:
-                agent.prune_weights()
             t += 1
+        if done or truncated:
+            observation, info = task.reset(seed=i + 1)
+            done, truncated = False, False
         rews.append(rew_ep)
-        task.reset(seed=i + 1)
+        
     task.close()
 
     return np.mean(rews)
@@ -68,7 +70,7 @@ def experiment_launcher(config):
     seed = config["seed"]
 
     print(config)
-    fka = SBM(config["nodes"], 0, 0)
+    fka = TSBM(config["nodes"], 0, 0, 0, False)
     args = config
     args["generations"] = 1000
     args["num_vars"] = fka.nparams  # Number of dimensions of the search space
@@ -119,18 +121,18 @@ if __name__ == "__main__":
 
     args = {"seed": seed,
             "task": task}
-    for hnodes in [5,6,7,8,9]:
-        for pr in [0, 40, 60, 80, 90,99]:
-            for ps in [2, 20, 40, 60, 80]:
-                if not chs(os.path.join("RQ1", "DSBM", args["task"], str(hnodes), str(pr), str(ps), str(seed))):
-                    args["dir"] = os.path.join("RQ1","DSBM", args["task"], str(hnodes), str(pr), str(ps), str(seed))
+    for hnodes in [2,3,4]:
+        for pr in [0, 40, 80]:
+            for ps in [2, 40, 80]:
+                if not chs(os.path.join("RQ1", "TSBM3", args["task"], str(hnodes), str(pr), str(ps), str(seed))):
+                    args["dir"] = os.path.join("RQ1","TSBM3", args["task"], str(hnodes), str(pr), str(ps), str(seed))
 
-                    os.makedirs(os.path.join("RQ1", "DSBM"), exist_ok=True)
-                    os.makedirs(os.path.join("RQ1", "DSBM", task), exist_ok=True)
-                    os.makedirs(os.path.join("RQ1", "DSBM", task, str(hnodes)), exist_ok=True)
-                    os.makedirs(os.path.join("RQ1", "DSBM", task, str(hnodes), str(pr)), exist_ok=True)
-                    os.makedirs(os.path.join("RQ1", "DSBM", task, str(hnodes), str(pr), str(ps)), exist_ok=True)
-                    os.makedirs(os.path.join("RQ1", "DSBM", task, str(hnodes), str(pr), str(ps), str(seed)),
+                    os.makedirs(os.path.join("RQ1", "TSBM3"), exist_ok=True)
+                    os.makedirs(os.path.join("RQ1", "TSBM3", task), exist_ok=True)
+                    os.makedirs(os.path.join("RQ1", "TSBM3", task, str(hnodes)), exist_ok=True)
+                    os.makedirs(os.path.join("RQ1", "TSBM3", task, str(hnodes), str(pr)), exist_ok=True)
+                    os.makedirs(os.path.join("RQ1", "TSBM3", task, str(hnodes), str(pr), str(ps)), exist_ok=True)
+                    os.makedirs(os.path.join("RQ1", "TSBM3", task, str(hnodes), str(pr), str(ps), str(seed)),
                                 exist_ok=True)
 
                     taskinfo = {"MountainCar": [2, 3],

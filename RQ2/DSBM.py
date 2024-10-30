@@ -20,21 +20,22 @@ def eval(data):
 
     agent = D_SBM(args["nodes"], prune_ratio=args["pr"], seed=args['seed'])
     agent.set_hrules(x)
-    obs, info = task.reset()
+    obs, info = task.reset(seed=0)
     done = False
     truncated = False
     rew_ep = 0
     t = 0
     while not (done or truncated):
         output = agent.activate(obs)
+        agent.update_weights()
         obs, rew, done, truncated, info = task.step(output)
-
+        # task.render()
         rew_ep += rew
         if t == args['ps']:
             agent.prune_weights()
         t += 1
     task.close()
-
+    #print(t, rew_ep)
     return rew_ep
 
 
@@ -56,7 +57,7 @@ def parallel_val(candidates, args):
     with Pool() as p:
         return p.map(eval, [[c, json.loads(json.dumps(args))] for c in candidates])
     # res = [eval([c, json.loads(json.dumps(args))]) for c in candidates]
-    # return res
+    return res
 
 
 def experiment_launcher(config):
@@ -113,9 +114,9 @@ if __name__ == "__main__":
 
     args = {"seed": seed,
             "task": task}
-    for hnodes in [100, 200, 300]:
-        for pr in [0, 40, 60, 80, 90, 99]:
-            for ps in [2, 200, 400, 600, 800]:
+    for hnodes in [100]:
+        for pr in [0, 60, 90, 99]:
+            for ps in [2, 400, 800]:
                 if not chs(os.path.join("RQ2", "DSBM", args["task"], str(hnodes), str(pr), str(ps), str(seed))):
                     args["dir"] = os.path.join("RQ2", "DSBM", args["task"], str(hnodes), str(pr), str(ps), str(seed))
 

@@ -6,9 +6,9 @@ import numpy as np
 import functools
 import pickle
 from multiprocessing import Pool
-from SBM.common.network5 import NDEP_SBM
+from SBM.common.network import NDEP_SBM
 import json
-
+from SBM.common.optimizer import ES1
 
 def eval(data):
     x = data[0]
@@ -16,15 +16,15 @@ def eval(data):
 
     task = gym.make(args["task"] + "-v4")
 
-    agent = NDEP_SBM(args["nodes"], prune_ratio=args["pr"], seed=args['seed'])
+    agent = NDEP_SBM(args["nodes"], prune_ratio=0, seed=args['seed'], norm_flag=True)
 
-    pp = [1.0 / (1.0 + np.exp(-v)) for v in x[:sum(agent.nodes[1:])]]
+    pp = [1.0 / (1.0 + np.exp(-v)) for v in x[:sum(agent.nodes[1:])*2]]
     for i in range(1, len(pp), 2):
         pp[i] *= 1000
-    hr = x[sum(agent.nodes[1:]):]
+    hr = x[sum(agent.nodes[1:])*2:]
     agent.set_hrules(hr)
     agent.set_prune_rules(pp)
-    obs, info = task.reset()
+    obs, info = task.reset(seed=0)
     done = False
     truncated = False
     rew_ep = 0
@@ -58,7 +58,7 @@ def parallel_val(candidates, args):
     with Pool() as p:
         return p.map(eval, [[c, json.loads(json.dumps(args))] for c in candidates])
     # res = [eval([c, json.loads(json.dumps(args))]) for c in candidates]
-    # return res
+    return res
 
 
 def experiment_launcher(config):
@@ -67,7 +67,7 @@ def experiment_launcher(config):
     print(config)
     fka = NDEP_SBM(config["nodes"], 0, 0)
     args = config
-    args["generations"] = 1000
+    args["generations"] = 100
     args["num_vars"] = fka.nparams  # Number of dimensions of the search space
     print("this problem has " + str(args["num_vars"]) + " parameters")
     args["seed"] = seed
@@ -83,15 +83,17 @@ def experiment_launcher(config):
             np.mean(fitnesses))
 
         print(log)
-        with open(os.path.join(args["dir"], "best_" + str(gen) + ".pkl"), "wb") as f:
-            pickle.dump(candidates[np.argmax(fitnesses)], f)
+        #with open(os.path.join(args["dir"], "best_" + str(gen) + ".pkl"), "wb") as f:
+        #    pickle.dump(es.elite, f)
 
         with open(os.path.join(args["dir"], "tlog.txt"), "a") as f:
             f.write(log + "\n")
-
+        
         logs.append(log)
 
         es.tell(candidates, fitnesses)
+        with open(os.path.join(args["dir"], "best_" + str(gen) + ".pkl"), "wb") as f:
+            pickle.dump(es.elite, f)
         gen += 1
 
     best_guy = es.elite[1]
@@ -115,9 +117,9 @@ if __name__ == "__main__":
 
     args = {"seed": seed,
             "task": task}
-    for hnodes in [100, 200, 300]:
-        for pr in [0, 40, 60, 80, 90, 99]:
-            for ps in [2, 200, 400, 600, 800]:
+    for hnodes in [192]:
+        for pr in [0]:
+            for ps in [2]:
                 if not chs(os.path.join("RQ2", "NDEPSBM", args["task"], str(hnodes), str(pr), str(ps), str(seed))):
                     args["dir"] = os.path.join("RQ2", "NDEPSBM", args["task"], str(hnodes), str(pr), str(ps), str(seed))
 
