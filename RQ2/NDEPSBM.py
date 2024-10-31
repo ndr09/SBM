@@ -16,7 +16,7 @@ def eval(data):
 
     task = gym.make(args["task"] + "-v4")
 
-    agent = NDEP_SBM(args["nodes"], prune_ratio=0, seed=args['seed'], norm_flag=True)
+    agent = NDEP_SBM(args["nodes"], prune_ratio=0, seed=args['seed'])
 
     pp = [1.0 / (1.0 + np.exp(-v)) for v in x[:sum(agent.nodes[1:])*2]]
     for i in range(1, len(pp), 2):
